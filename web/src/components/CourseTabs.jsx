@@ -15,7 +15,7 @@ export default function CourseTabs({ courses, activeId = 'all', onChange }) {
                 : 'bg-white/5 text-white/55 hover:bg-white/10 hover:text-white'
             }`}
           >
-            {c.code || c.name}
+            {c.short || c.code || c.name}
           </button>
         )
       })}

@@ -50,6 +50,21 @@ def _iso(dt) -> str | None:
     return dt.isoformat() if dt is not None else None
 
 
+def _short_label(code: str | None, name: str) -> str:
+    """Compact display label, e.g. 'SW294.ITE.140.W1.FA26' -> 'ITE 140'.
+
+    Canvas course_code is a dotted SIS string; extract the subject token +
+    numeric token. Falls back to the course name when there's no numeric part
+    (e.g. 'SWCC Resources')."""
+    if not code:
+        return name
+    parts = code.split(".")
+    for i, tok in enumerate(parts):
+        if tok.isalpha() and 2 <= len(tok) <= 5 and i + 1 < len(parts) and parts[i + 1].isdigit():
+            return f"{tok} {parts[i + 1]}"
+    return name
+
+
 def fetch_courses(engine: sa.Engine) -> list[dict]:
     """Active courses with progress = submitted/total assignments (0-100)."""
     submitted = (
@@ -99,6 +114,7 @@ def fetch_courses(engine: sa.Engine) -> list[dict]:
             "id": str(r["id"]),
             "name": r["name"],
             "code": r["course_code"],
+            "short": _short_label(r["course_code"], r["name"]),
             "term": r["term_name"] or "",
             "progress": progress,
         })
