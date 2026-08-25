@@ -28,6 +28,7 @@ assignments_t = sa.Table(
     sa.Column("name", sa.Text),
     sa.Column("due_at", sa.DateTime(timezone=True)),
     sa.Column("points_possible", sa.Numeric(8, 2)),
+    sa.Column("html_url", sa.Text),
 )
 
 assignment_status_t = sa.Table(
@@ -110,6 +111,7 @@ def fetch_assignments(engine: sa.Engine) -> list[dict]:
             assignments_t.c.name,
             assignments_t.c.due_at,
             assignments_t.c.points_possible,
+            assignments_t.c.html_url,
             sa.func.coalesce(assignment_status_t.c.status, "not_started").label("status"),
         )
         .select_from(
@@ -132,6 +134,7 @@ def fetch_assignments(engine: sa.Engine) -> list[dict]:
             "dueAt": _iso(r["due_at"]),
             "points": float(r["points_possible"] or 0),
             "status": r["status"],
+            "url": r["html_url"],
         }
         for r in rows
     ]

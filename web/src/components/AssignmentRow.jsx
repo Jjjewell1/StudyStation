@@ -14,9 +14,21 @@ export default function AssignmentRow({ assignment }) {
   return (
     <div className="glass-subtle group flex items-center gap-4 rounded-2xl px-4 py-3 transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-white/20 hover:shadow-md">
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold text-white">
-          {assignment.name}
-        </div>
+        {assignment.url ? (
+          <a
+            href={assignment.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block truncate text-sm font-semibold text-white transition-colors duration-200 hover:text-cyan-300 hover:underline"
+            title={`Open ${assignment.name} in Canvas`}
+          >
+            {assignment.name}
+          </a>
+        ) : (
+          <div className="truncate text-sm font-semibold text-white">
+            {assignment.name}
+          </div>
+        )}
         <div
           className={`mt-0.5 text-xs ${
             overdue ? 'font-medium text-red-300' : 'text-white/45'

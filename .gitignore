@@ -19,3 +19,6 @@ web/dist/
 
 # local ops notes
 *.local-note
+
+# never commit tokens
+*token*.txt
