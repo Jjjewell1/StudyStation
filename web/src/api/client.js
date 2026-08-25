@@ -4,10 +4,35 @@
 // build runs identically in dev and self-hosted production.
 const BASE = '/api'
 
+let authToken = null
+try {
+  authToken = localStorage.getItem('studystation_token')
+} catch {
+  /* SSR / privacy mode */
+}
+
+export function setAuthToken(token) {
+  authToken = token
+  try {
+    if (token) localStorage.setItem('studystation_token', token)
+    else localStorage.removeItem('studystation_token')
+  } catch {
+    /* ignore */
+  }
+}
+
+export function hasAuthToken() {
+  return !!authToken
+}
+
+function authHeaders(extra = {}) {
+  const headers = { ...extra, Accept: 'application/json' }
+  if (authToken) headers.Authorization = `Bearer ${authToken}`
+  return headers
+}
+
 async function getJSON(path) {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { Accept: 'application/json' },
-  })
+  const res = await fetch(`${BASE}${path}`, { headers: authHeaders() })
   if (!res.ok) {
     throw new Error(`GET ${BASE}${path} failed (${res.status})`)
   }
@@ -17,7 +42,7 @@ async function getJSON(path) {
 async function sendJSON(path, method, body) {
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   if (!res.ok) {
@@ -32,6 +57,11 @@ async function sendJSON(path, method, body) {
   }
   return res.status === 204 ? null : res.json()
 }
+
+// Auth
+export const login = (pin) => sendJSON('/auth/login', 'POST', { pin })
+export const getAuthStatus = () => getJSON('/auth/status')
+export const logout = () => sendJSON('/auth/logout', 'POST')
 
 export const getCourses = () => getJSON('/courses')
 export const getAssignments = () => getJSON('/assignments')

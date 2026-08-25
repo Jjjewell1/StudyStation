@@ -11,6 +11,7 @@ const NAV = [
   { id: 'tasks', label: 'Tasks', icon: 'tasks' },
   { id: 'contacts', label: 'Contacts', icon: 'contacts' },
   { id: 'resources', label: 'Resources', icon: 'resources' },
+  { id: 'settings', label: 'Settings', icon: 'gear' },
 ]
 
 export default function Sidebar({ active = 'overview', onNavigate }) {

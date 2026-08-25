@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
 import StatCard from './components/StatCard'
@@ -9,10 +9,13 @@ import ResourcesView from './components/ResourcesView'
 import MailView from './components/MailView'
 import TasksView from './components/TasksView'
 import ContactsView from './components/ContactsView'
+import SettingsView from './components/SettingsView'
+import LoginPage from './components/LoginPage'
 import GoogleConnect, { useGoogleStatus } from './components/GoogleConnect'
 import ChatPanel from './components/ChatPanel'
 import { Icon } from './components/Icon'
 import { useDashboardData } from './hooks/useDashboardData'
+import { getAuthStatus, setAuthToken } from '@/api/client'
 
 function Background() {
   return (
@@ -41,6 +44,43 @@ const FILTERS = {
 }
 
 export default function App() {
+  const [auth, setAuth] = useState({ checking: true, pinRequired: false, authenticated: true })
+
+  // Check PIN gate on mount.
+  useEffect(() => {
+    getAuthStatus()
+      .then((s) => setAuth({ checking: false, pinRequired: s.pinRequired, authenticated: s.authenticated }))
+      .catch(() => setAuth({ checking: false, pinRequired: false, authenticated: true }))
+  }, [])
+
+  function handleLogout() {
+    setAuthToken(null)
+    setAuth({ checking: false, pinRequired: true, authenticated: false })
+  }
+
+  if (auth.checking) {
+    return (
+      <div className="relative flex min-h-screen items-center justify-center">
+        <Background />
+        <div className="text-sm text-white/50">Loading…</div>
+      </div>
+    )
+  }
+
+  if (auth.pinRequired && !auth.authenticated) {
+    return (
+      <LoginPage
+        onAuthenticated={() =>
+          setAuth((a) => ({ ...a, authenticated: true }))
+        }
+      />
+    )
+  }
+
+  return <Dashboard onLogout={handleLogout} />
+}
+
+function Dashboard({ onLogout }) {
   const { courses, assignments, stats, filtered, loading, error } = useDashboardData()
   const [active, setActive] = useState('overview')
   const [filterKey, setFilterKey] = useState(null)
@@ -198,6 +238,8 @@ export default function App() {
           {active === 'contacts' && <ContactsView />}
 
           {active === 'resources' && <ResourcesView />}
+
+          {active === 'settings' && <SettingsView onLogout={onLogout} />}
         </main>
       </div>
     </div>

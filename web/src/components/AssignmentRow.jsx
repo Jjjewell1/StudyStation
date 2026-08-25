@@ -7,12 +7,12 @@ const STATUS = {
   submitted: { label: 'Submitted', cls: 'bg-emerald-400/15 text-emerald-200 border-emerald-300/25' },
 }
 
-export default function AssignmentRow({ assignment }) {
+export default function AssignmentRow({ assignment, courseName }) {
   const s = STATUS[assignment.status] ?? STATUS.not_started
   const overdue = assignment.status !== 'submitted' && isPast(assignment.dueAt)
 
   return (
-    <div className="glass-subtle group flex items-center gap-4 rounded-2xl px-4 py-3 transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-white/20 hover:shadow-md">
+    <div className="group flex items-center gap-3 rounded-xl px-3 py-2 transition-all duration-200 ease-out hover:bg-white/5">
       <div className="min-w-0 flex-1">
         {assignment.url ? (
           <a
@@ -30,10 +30,11 @@ export default function AssignmentRow({ assignment }) {
           </div>
         )}
         <div
-          className={`mt-0.5 text-xs ${
+          className={`mt-0.5 truncate text-xs ${
             overdue ? 'font-medium text-red-300' : 'text-white/45'
           }`}
         >
+          {courseName && <span className="text-white/35">{courseName} · </span>}
           {formatDueDate(assignment.dueAt)} · {assignment.points} pts
         </div>
       </div>

@@ -47,3 +47,45 @@ export function relativeLabel(iso) {
   if (days <= 7) return `in ${days}d`
   return `${days}d`
 }
+
+// Week helpers (week starts Monday, matches how Canvas/schools typically lay
+// out terms).
+export function startOfWeek(iso) {
+  const d = new Date(iso)
+  const day = (d.getDay() + 6) % 7 // Mon=0 .. Sun=6
+  d.setDate(d.getDate() - day)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+export function endOfWeek(iso) {
+  const d = startOfWeek(iso)
+  d.setDate(d.getDate() + 6)
+  d.setHours(23, 59, 59, 999)
+  return d
+}
+
+export function weekKey(iso) {
+  const d = startOfWeek(iso)
+  return d.toISOString().slice(0, 10)
+}
+
+// ISO week number (1-53)
+export function isoWeekNumber(iso) {
+  const d = new Date(iso)
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  const dayNum = date.getUTCDay() || 7
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1))
+  return Math.ceil(((date - yearStart) / 86400000 + 1) / 7)
+}
+
+export function weekRangeLabel(iso) {
+  const s = startOfWeek(iso)
+  const e = endOfWeek(iso)
+  const opts = { month: 'short', day: 'numeric' }
+  const sameMonth = s.getMonth() === e.getMonth()
+  const startStr = s.toLocaleDateString(undefined, sameMonth ? { month: 'short', day: 'numeric' } : opts)
+  const endStr = e.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return `${startStr} – ${endStr}`
+}

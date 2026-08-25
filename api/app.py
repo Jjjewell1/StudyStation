@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from db import fetch_assignments, fetch_courses, fetch_resource_links, make_engine
+import auth
 import google_client
 import google_routes
 
@@ -30,16 +31,66 @@ app = FastAPI(title="StudyStation API", version="0.1.0")
 app.state.engine = engine
 app.include_router(google_routes.router)
 
+# Paths that bypass PIN auth (login itself, health, and the Google OAuth
+# callback which is hit by an external browser redirect without our header).
+_PUBLIC_PATHS = {"/api/auth/login", "/api/health", "/api/google/callback"}
+
+
+def _bearer(request: Request) -> str:
+    header = request.headers.get("authorization", "")
+    if header.lower().startswith("bearer "):
+        return header[7:].strip()
+    return ""
+
+
+@app.middleware("http")
+async def pin_auth_middleware(request: Request, call_next):
+    if not auth.pin_required() or request.url.path in _PUBLIC_PATHS:
+        return await call_next(request)
+    token = _bearer(request)
+    if not auth.validate(engine, token):
+        return JSONResponse({"detail": "unauthorized"}, status_code=401)
+    return await call_next(request)
+
 
 @app.on_event("startup")
 def _startup() -> None:
-    # Ensure the google_tokens table exists before any auth call touches it.
+    # Ensure owned tables exist before any request touches them.
     google_client.ensure_schema(engine)
+    auth.ensure_schema(engine)
 
 
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.post("/api/auth/login")
+def login(body: dict):
+    pin = (body or {}).get("pin", "")
+    try:
+        token = auth.create_session(engine, pin)
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"token": token}
+
+
+@app.get("/api/auth/status")
+def auth_status(request: Request) -> dict:
+    return {
+        "pinRequired": auth.pin_required(),
+        "authenticated": not auth.pin_required() or auth.validate(engine, _bearer(request)),
+    }
+
+
+@app.post("/api/auth/logout")
+def logout(request: Request) -> dict:
+    token = _bearer(request)
+    if token:
+        auth.revoke(engine, token)
+    return {"authenticated": False}
 
 
 @app.get("/api/courses")
@@ -68,4 +119,4 @@ def resources() -> list[dict]:
 
 @app.get("/api")
 def api_root() -> JSONResponse:
-    return JSONResponse({"endpoints": ["/api/courses", "/api/assignments", "/api/resources", "/api/health", "/api/google/*"]})
+    return JSONResponse({"endpoints": ["/api/courses", "/api/assignments", "/api/resources", "/api/health", "/api/auth/*", "/api/google/*"]})
