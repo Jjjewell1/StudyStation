@@ -1,12 +1,18 @@
 #!/bin/sh
-# Entrypoint: RUN_ONCE=1 -> single sync run and exit (testing/manual).
-# Otherwise generate a crontab from SYNC_SCHEDULE and hand off to supercronic.
+# Entrypoint:
+#   RUN_ONCE=1 -> single sync run and exit (testing/manual).
+#   Otherwise  -> run one sync immediately (so a freshly pasted session takes
+#                 effect on redeploy without waiting for the nightly slot),
+#                 then generate a crontab from SYNC_SCHEDULE for supercronic.
 set -eu
 
 if [ "${RUN_ONCE:-0}" = "1" ]; then
     echo "[entrypoint] RUN_ONCE=1 - running one sync now"
     exec python -u main.py
 fi
+
+echo "[entrypoint] running startup sync (errors here won't stop cron mode)"
+python -u main.py || echo "[entrypoint] startup sync exited nonzero - continuing to cron mode"
 
 SCHED="${SYNC_SCHEDULE:-0 3 * * *}"
 # supercronic wants exactly 5 fields; refuse to boot with a broken schedule
