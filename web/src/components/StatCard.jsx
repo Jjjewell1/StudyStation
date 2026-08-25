@@ -5,10 +5,16 @@ const TONES = {
   green: { glow: 'shadow-emerald-500/25', accent: 'from-emerald-500/20 to-transparent' },
 }
 
-export default function StatCard({ label, value, tone = 'blue', icon, sub }) {
+export default function StatCard({ label, value, tone = 'blue', icon, sub, active, onClick }) {
   const t = TONES[tone] ?? TONES.blue
+  const Comp = onClick ? 'button' : 'div'
   return (
-    <div className="glass group relative overflow-hidden rounded-3xl p-5 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-lg">
+    <Comp
+      onClick={onClick}
+      className={`glass group relative overflow-hidden rounded-3xl p-5 text-left transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-lg ${
+        onClick ? 'cursor-pointer' : ''
+      } ${active ? 'ring-2 ring-white/25' : ''}`}
+    >
       <div
         className={`pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-to-br ${t.accent} blur-xl transition-opacity duration-300`}
       />
@@ -22,6 +28,6 @@ export default function StatCard({ label, value, tone = 'blue', icon, sub }) {
       </div>
       <div className="mt-3 text-4xl font-bold tracking-tight">{value}</div>
       {sub && <div className="mt-1 text-xs text-white/45">{sub}</div>}
-    </div>
+    </Comp>
   )
 }

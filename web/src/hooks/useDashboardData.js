@@ -46,6 +46,7 @@ export function useDashboardData() {
       dueThisWeek: dueThisWeek.length,
       completed: completed.length,
     },
+    filtered: { overdue, dueToday, dueThisWeek, completed },
     loading,
     error,
   }

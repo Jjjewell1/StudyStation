@@ -29,9 +29,17 @@ function Background() {
   )
 }
 
+const FILTERS = {
+  overdue: { label: 'Overdue', tone: 'red' },
+  dueToday: { label: 'Due today', tone: 'amber' },
+  dueThisWeek: { label: 'Due this week', tone: 'blue' },
+  completed: { label: 'Completed', tone: 'green' },
+}
+
 export default function App() {
-  const { courses, assignments, stats, loading, error } = useDashboardData()
+  const { courses, assignments, stats, filtered, loading, error } = useDashboardData()
   const [active, setActive] = useState('overview')
+  const [filterKey, setFilterKey] = useState(null)
 
   // Group assignments by course, sorted by course name.
   const grouped = useMemo(() => {
@@ -45,8 +53,28 @@ export default function App() {
     return [...map.values()].sort((x, y) => x.name.localeCompare(y.name))
   }, [courses, assignments])
 
+  // Group a stat-filter bucket by course (same shape as `grouped`).
+  const filteredGrouped = useMemo(() => {
+    if (!filterKey) return null
+    const bucket = filtered[filterKey] ?? []
+    const map = new Map()
+    for (const a of bucket) {
+      const course = courses.find((c) => c.id === a.courseId) ?? {
+        id: a.courseId, name: 'Unknown course', term: '',
+      }
+      if (!map.has(a.courseId)) map.set(a.courseId, { ...course, assignments: [] })
+      map.get(a.courseId).assignments.push(a)
+    }
+    return [...map.values()].sort((x, y) => x.name.localeCompare(y.name))
+  }, [filterKey, filtered, courses])
+
   const totalCourses = courses.length
   const totalAssignments = assignments.length
+
+  function openFilter(key) {
+    setFilterKey(key)
+    setActive('assignments')
+  }
 
   const statCards = (
     <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -56,6 +84,8 @@ export default function App() {
         tone="red"
         icon={<Icon name="calendar" className="h-5 w-5" />}
         sub="needs attention"
+        active={filterKey === 'overdue'}
+        onClick={() => openFilter('overdue')}
       />
       <StatCard
         label="Due today"
@@ -63,6 +93,8 @@ export default function App() {
         tone="amber"
         icon={<Icon name="assignments" className="h-5 w-5" />}
         sub="closing soon"
+        active={filterKey === 'dueToday'}
+        onClick={() => openFilter('dueToday')}
       />
       <StatCard
         label="Due this week"
@@ -70,6 +102,8 @@ export default function App() {
         tone="blue"
         icon={<Icon name="overview" className="h-5 w-5" />}
         sub="next 7 days"
+        active={filterKey === 'dueThisWeek'}
+        onClick={() => openFilter('dueThisWeek')}
       />
       <StatCard
         label="Completed"
@@ -77,6 +111,8 @@ export default function App() {
         tone="green"
         icon={<Icon name="send" className="h-5 w-5" />}
         sub={`of ${totalAssignments} total`}
+        active={filterKey === 'completed'}
+        onClick={() => openFilter('completed')}
       />
     </section>
   )
@@ -134,9 +170,11 @@ export default function App() {
               {statCards}
               <AssignmentsPanel
                 courses={courses}
-                grouped={grouped}
+                grouped={filteredGrouped ?? grouped}
                 loading={loading}
                 error={error}
+                filter={filterKey ? FILTERS[filterKey] : null}
+                onClearFilter={() => setFilterKey(null)}
               />
             </>
           )}
