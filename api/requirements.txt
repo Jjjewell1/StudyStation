@@ -1,0 +1,6 @@
+# Read-only API deps. Matches the sync job's dialect (psycopg3) so both
+# services talk to Postgres the same way.
+sqlalchemy>=2.0.36,<2.1
+psycopg[binary]>=3.2,<4
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1

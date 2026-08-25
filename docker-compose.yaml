@@ -42,12 +42,28 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     restart: unless-stopped
 
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
   web:
     build:
       context: ./web
       dockerfile: Dockerfile
     depends_on:
-      db:
+      api:
         condition: service_healthy
     networks: [default, coolify]
     labels:
