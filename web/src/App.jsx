@@ -6,6 +6,10 @@ import AssignmentsPanel from './components/AssignmentsPanel'
 import CoursesView from './components/CoursesView'
 import CalendarView from './components/CalendarView'
 import ResourcesView from './components/ResourcesView'
+import MailView from './components/MailView'
+import TasksView from './components/TasksView'
+import ContactsView from './components/ContactsView'
+import GoogleConnect, { useGoogleStatus } from './components/GoogleConnect'
 import ChatPanel from './components/ChatPanel'
 import { Icon } from './components/Icon'
 import { useDashboardData } from './hooks/useDashboardData'
@@ -40,6 +44,7 @@ export default function App() {
   const { courses, assignments, stats, filtered, loading, error } = useDashboardData()
   const [active, setActive] = useState('overview')
   const [filterKey, setFilterKey] = useState(null)
+  const google = useGoogleStatus()
 
   // Group assignments by course, sorted by course name.
   const grouped = useMemo(() => {
@@ -160,6 +165,7 @@ export default function App() {
                     </div>
                   </div>
                   <ChatPanel />
+                  <GoogleConnect status={google} onChanged={google.refresh} compact />
                 </div>
               </section>
             </>
@@ -184,6 +190,12 @@ export default function App() {
           )}
 
           {active === 'calendar' && <CalendarView assignments={assignments} />}
+
+          {active === 'mail' && <MailView />}
+
+          {active === 'tasks' && <TasksView />}
+
+          {active === 'contacts' && <ContactsView />}
 
           {active === 'resources' && <ResourcesView />}
         </main>

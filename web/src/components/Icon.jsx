@@ -91,6 +91,52 @@ const paths = {
       <path d="M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5" />
     </>
   ),
+  mail: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" />
+      <path d="m3 7 9 6 9-6" />
+    </>
+  ),
+  tasks: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <path d="m7 12 3 3 7-7" />
+    </>
+  ),
+  contacts: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20a8 8 0 0 1 16 0" />
+    </>
+  ),
+  calendarCheck: (
+    <>
+      <rect x="3" y="4.5" width="18" height="16" rx="2.5" />
+      <path d="M3 9.5h18" />
+      <path d="M8 3v3" />
+      <path d="M16 3v3" />
+      <path d="m8.5 15 2.5 2.5 4.5-4.5" />
+    </>
+  ),
+  add: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v8" />
+      <path d="M8 12h8" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M4 7h16" />
+      <path d="M9 7V4h6v3" />
+      <path d="M6 7l1 13h10l1-13" />
+    </>
+  ),
+  back: (
+    <>
+      <path d="m15 18-6-6 6-6" />
+    </>
+  ),
 }
 
 export function Icon({ name, className = 'w-5 h-5' }) {

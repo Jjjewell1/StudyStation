@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { getCalendarEvents, getGoogleStatus } from '@/api/client'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -9,6 +10,28 @@ function startOfDay(d) {
 export default function CalendarView({ assignments }) {
   const [cursor, setCursor] = useState(() => startOfDay(new Date()))
   const [selected, setSelected] = useState(null)
+  const [gEvents, setGEvents] = useState([])
+  const [gConnected, setGConnected] = useState(false)
+
+  // Pull Google Calendar events for the visible month once connected.
+  useEffect(() => {
+    let cancelled = false
+    getGoogleStatus()
+      .then((s) => {
+        if (!cancelled) setGConnected(s.connected)
+        if (!s.connected) return
+        const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1).toISOString()
+        const end = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1).toISOString()
+        return getCalendarEvents(start, end)
+      })
+      .then((events) => {
+        if (!cancelled && events) setGEvents(events)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [cursor])
 
   const monthLabel = cursor.toLocaleDateString(undefined, {
     month: 'long',
@@ -25,8 +48,16 @@ export default function CalendarView({ assignments }) {
       if (!map.has(key)) map.set(key, [])
       map.get(key).push(a)
     }
+    // Merge Google events into the same per-day map (distinct key namespace).
+    for (const e of gEvents) {
+      const iso = e.allDay ? e.start : e.start
+      const d = startOfDay(new Date(iso))
+      const key = d.toDateString()
+      if (!map.has(key)) map.set(key, [])
+      map.get(key).push({ _google: true, ...e, id: `g-${e.id}` })
+    }
     return map
-  }, [assignments])
+  }, [assignments, gEvents])
 
   const cells = useMemo(() => {
     const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
@@ -105,9 +136,11 @@ export default function CalendarView({ assignments }) {
               {dayItems.length > 0 && (
                 <span
                   className={`mt-0.5 h-1.5 w-1.5 rounded-full ${
-                    dayItems.some((a) => a.status !== 'submitted' && new Date(a.dueAt) < new Date())
-                      ? 'bg-red-400'
-                      : 'bg-cyan-300'
+                    dayItems.some((a) => a._google)
+                      ? 'bg-amber-300'
+                      : dayItems.some((a) => a.status !== 'submitted' && new Date(a.dueAt) < new Date())
+                        ? 'bg-red-400'
+                        : 'bg-cyan-300'
                   }`}
                 />
               )}
@@ -129,27 +162,58 @@ export default function CalendarView({ assignments }) {
             <p className="px-1 text-sm text-white/45">Nothing due.</p>
           ) : (
             <div className="flex flex-col gap-2">
-              {selectedAssignments.map((a) => (
-                <a
-                  key={a.id}
-                  href={a.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="glass-subtle flex items-center gap-3 rounded-2xl px-4 py-2.5 text-sm transition-all duration-200 hover:border-white/20"
-                >
-                  <span className="truncate font-medium text-white">{a.name}</span>
-                  <span className="ml-auto shrink-0 text-xs text-white/45">
-                    {new Date(a.dueAt).toLocaleTimeString(undefined, {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                    })}
-                  </span>
-                </a>
-              ))}
+              {selectedAssignments.map((a) =>
+                a._google ? (
+                  <div
+                    key={a.id}
+                    className="glass-subtle flex items-center gap-3 rounded-2xl px-4 py-2.5 text-sm"
+                  >
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-amber-300" />
+                    <span className="min-w-0 flex-1 truncate font-medium text-white">
+                      {a.title}
+                    </span>
+                    {!a.allDay && (
+                      <span className="shrink-0 text-xs text-white/45">
+                        {new Date(a.start).toLocaleTimeString(undefined, {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <a
+                    key={a.id}
+                    href={a.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="glass-subtle flex items-center gap-3 rounded-2xl px-4 py-2.5 text-sm transition-all duration-200 hover:border-white/20"
+                  >
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-cyan-300" />
+                    <span className="truncate font-medium text-white">{a.name}</span>
+                    <span className="ml-auto shrink-0 text-xs text-white/45">
+                      {new Date(a.dueAt).toLocaleTimeString(undefined, {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </a>
+                ),
+              )}
             </div>
           )}
         </div>
       )}
+      <div className="mt-4 flex items-center gap-4 border-t border-white/10 px-1 pt-3 text-xs text-white/45">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-cyan-300" /> Assignments
+        </span>
+        {gConnected && (
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-amber-300" /> Google Calendar
+          </span>
+        )}
+      </div>
     </section>
   )
 }

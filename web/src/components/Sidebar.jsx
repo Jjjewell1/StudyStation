@@ -1,11 +1,15 @@
 import { useState } from 'react'
 import { Icon } from './Icon'
+import Logo from './Logo'
 
 const NAV = [
   { id: 'overview', label: 'Overview', icon: 'overview' },
   { id: 'assignments', label: 'Assignments', icon: 'assignments' },
   { id: 'courses', label: 'Courses', icon: 'courses' },
   { id: 'calendar', label: 'Calendar', icon: 'calendar' },
+  { id: 'mail', label: 'Mail', icon: 'mail' },
+  { id: 'tasks', label: 'Tasks', icon: 'tasks' },
+  { id: 'contacts', label: 'Contacts', icon: 'contacts' },
   { id: 'resources', label: 'Resources', icon: 'resources' },
 ]
 
@@ -19,8 +23,8 @@ export default function Sidebar({ active = 'overview', onNavigate }) {
       }`}
     >
       <div className="flex items-center gap-3 px-1">
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-lg shadow-indigo-500/30">
-          <Icon name="sparkle" className="h-5 w-5" />
+        <div className="grid h-10 w-10 shrink-0 place-items-center">
+          <Logo className="h-10 w-10 drop-shadow-lg" />
         </div>
         {!collapsed && (
           <div className="leading-tight">

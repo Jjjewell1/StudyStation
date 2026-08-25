@@ -17,6 +17,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 
 from db import fetch_assignments, fetch_courses, fetch_resource_links, make_engine
+import google_client
+import google_routes
 
 DATABASE_URL = (os.environ.get("DATABASE_URL") or "").strip()
 if not DATABASE_URL:
@@ -25,6 +27,14 @@ if not DATABASE_URL:
 engine = make_engine(DATABASE_URL)
 
 app = FastAPI(title="StudyStation API", version="0.1.0")
+app.state.engine = engine
+app.include_router(google_routes.router)
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    # Ensure the google_tokens table exists before any auth call touches it.
+    google_client.ensure_schema(engine)
 
 
 @app.get("/api/health")
@@ -58,4 +68,4 @@ def resources() -> list[dict]:
 
 @app.get("/api")
 def api_root() -> JSONResponse:
-    return JSONResponse({"endpoints": ["/api/courses", "/api/assignments", "/api/resources", "/api/health"]})
+    return JSONResponse({"endpoints": ["/api/courses", "/api/assignments", "/api/resources", "/api/health", "/api/google/*"]})
