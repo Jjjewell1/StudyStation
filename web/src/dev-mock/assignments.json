@@ -1,0 +1,13 @@
+[
+  { "id": "a1", "courseId": "835537", "name": "Rhetorical Analysis Essay", "dueAt": "2026-08-25T23:59:00Z", "points": 100, "status": "not_started" },
+  { "id": "a2", "courseId": "835537", "name": "Discussion Board: Week 3", "dueAt": "2026-08-22T23:59:00Z", "points": 20, "status": "submitted" },
+  { "id": "a3", "courseId": "835537", "name": "Annotated Bibliography", "dueAt": "2026-08-29T23:59:00Z", "points": 50, "status": "drafted" },
+  { "id": "a4", "courseId": "827064", "name": "Excel Capstone Project", "dueAt": "2026-08-24T23:59:00Z", "points": 150, "status": "not_started" },
+  { "id": "a5", "courseId": "827064", "name": "Lab 6: Pivot Tables", "dueAt": "2026-08-26T23:59:00Z", "points": 40, "status": "drafted" },
+  { "id": "a6", "courseId": "827064", "name": "Quiz: Functions & Formulas", "dueAt": "2026-08-30T23:59:00Z", "points": 30, "status": "submitted" },
+  { "id": "a7", "courseId": "761857", "name": "Networking Basics Worksheet", "dueAt": "2026-08-21T23:59:00Z", "points": 25, "status": "not_started" },
+  { "id": "a8", "courseId": "761857", "name": "Cybersecurity Awareness Module", "dueAt": "2026-09-02T23:59:00Z", "points": 35, "status": "not_started" },
+  { "id": "a9", "courseId": "834662", "name": "Linux Command Line Lab", "dueAt": "2026-08-25T23:59:00Z", "points": 75, "status": "submitted" },
+  { "id": "a10", "courseId": "834662", "name": "Windows Server Config Project", "dueAt": "2026-09-05T23:59:00Z", "points": 100, "status": "drafted" },
+  { "id": "a11", "courseId": "109223", "name": "Welcome Survey", "dueAt": "2026-08-20T23:59:00Z", "points": 5, "status": "submitted" }
+]

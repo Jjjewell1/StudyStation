@@ -42,5 +42,25 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     restart: unless-stopped
 
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [default, coolify]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+      - traefik.http.routers.studystation.rule=Host(`studystation.jewellcore.com`)
+      - traefik.http.routers.studystation.entrypoints=http
+      - traefik.http.services.studystation.loadbalancer.server.port=80
+    restart: unless-stopped
+
 volumes:
   studystation-db:
+
+networks:
+  coolify:
+    external: true

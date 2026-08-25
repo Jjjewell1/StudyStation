@@ -9,8 +9,9 @@ __pycache__/
 .venv/
 venv/
 
-# Node (future dashboard)
+# Node (dashboard)
 node_modules/
+web/dist/
 
 # Misc
 *.log
