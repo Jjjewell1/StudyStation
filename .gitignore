@@ -15,3 +15,6 @@ node_modules/
 # Misc
 *.log
 .DS_Store
+
+# local ops notes
+*.local-note
