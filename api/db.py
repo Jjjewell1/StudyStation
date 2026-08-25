@@ -17,6 +17,7 @@ courses_t = sa.Table(
     "courses", metadata,
     sa.Column("id", sa.BigInteger),
     sa.Column("name", sa.Text),
+    sa.Column("course_code", sa.Text),
     sa.Column("term_name", sa.Text),
     sa.Column("is_active", sa.Boolean),
 )
@@ -71,6 +72,7 @@ def fetch_courses(engine: sa.Engine) -> list[dict]:
         sa.select(
             courses_t.c.id,
             courses_t.c.name,
+            courses_t.c.course_code,
             courses_t.c.term_name,
             sa.func.count(assignments_t.c.id).label("total"),
             sa.func.coalesce(submitted.c.n, 0).label("done"),
@@ -81,7 +83,7 @@ def fetch_courses(engine: sa.Engine) -> list[dict]:
             ).outerjoin(submitted, submitted.c.course_id == courses_t.c.id)
         )
         .where(courses_t.c.is_active.is_(True))
-        .group_by(courses_t.c.id, courses_t.c.name, courses_t.c.term_name, submitted.c.n)
+        .group_by(courses_t.c.id, courses_t.c.name, courses_t.c.course_code, courses_t.c.term_name, submitted.c.n)
         .order_by(courses_t.c.name)
     )
 
@@ -96,6 +98,7 @@ def fetch_courses(engine: sa.Engine) -> list[dict]:
         out.append({
             "id": str(r["id"]),
             "name": r["name"],
+            "code": r["course_code"],
             "term": r["term_name"] or "",
             "progress": progress,
         })

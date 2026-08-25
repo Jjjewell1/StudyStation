@@ -2,13 +2,12 @@ import { useMemo, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
 import StatCard from './components/StatCard'
-import AssignmentRow from './components/AssignmentRow'
-import CourseProgressCard from './components/CourseProgressCard'
+import AssignmentsPanel from './components/AssignmentsPanel'
+import CoursesView from './components/CoursesView'
+import CalendarView from './components/CalendarView'
 import ChatPanel from './components/ChatPanel'
 import { Icon } from './components/Icon'
 import { useDashboardData } from './hooks/useDashboardData'
-
-const STATUS_ORDER = { not_started: 0, drafted: 1, submitted: 2 }
 
 function Background() {
   return (
@@ -33,8 +32,7 @@ export default function App() {
   const { courses, assignments, stats, loading, error } = useDashboardData()
   const [active, setActive] = useState('overview')
 
-  // Group assignments by course, sorted by course name, rows sorted by status
-  // then due date. Empty-state friendly when the backend isn't wired yet.
+  // Group assignments by course, sorted by course name.
   const grouped = useMemo(() => {
     const map = new Map()
     for (const c of courses) map.set(c.id, { ...c, assignments: [] })
@@ -49,6 +47,39 @@ export default function App() {
   const totalCourses = courses.length
   const totalAssignments = assignments.length
 
+  const statCards = (
+    <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <StatCard
+        label="Overdue"
+        value={loading ? '—' : stats.overdue}
+        tone="red"
+        icon={<Icon name="calendar" className="h-5 w-5" />}
+        sub="needs attention"
+      />
+      <StatCard
+        label="Due today"
+        value={loading ? '—' : stats.dueToday}
+        tone="amber"
+        icon={<Icon name="assignments" className="h-5 w-5" />}
+        sub="closing soon"
+      />
+      <StatCard
+        label="Due this week"
+        value={loading ? '—' : stats.dueThisWeek}
+        tone="blue"
+        icon={<Icon name="overview" className="h-5 w-5" />}
+        sub="next 7 days"
+      />
+      <StatCard
+        label="Completed"
+        value={loading ? '—' : stats.completed}
+        tone="green"
+        icon={<Icon name="send" className="h-5 w-5" />}
+        sub={`of ${totalAssignments} total`}
+      />
+    </section>
+  )
+
   return (
     <div className="relative min-h-screen">
       <Background />
@@ -59,125 +90,76 @@ export default function App() {
         <main className="flex min-w-0 flex-1 flex-col gap-6 pb-8">
           <Header />
 
-          {/* Stat cards */}
-          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              label="Overdue"
-              value={loading ? '—' : stats.overdue}
-              tone="red"
-              icon={<Icon name="calendar" className="h-5 w-5" />}
-              sub="needs attention"
-            />
-            <StatCard
-              label="Due today"
-              value={loading ? '—' : stats.dueToday}
-              tone="amber"
-              icon={<Icon name="assignments" className="h-5 w-5" />}
-              sub="closing soon"
-            />
-            <StatCard
-              label="Due this week"
-              value={loading ? '—' : stats.dueThisWeek}
-              tone="blue"
-              icon={<Icon name="overview" className="h-5 w-5" />}
-              sub="next 7 days"
-            />
-            <StatCard
-              label="Completed"
-              value={loading ? '—' : stats.completed}
-              tone="green"
-              icon={<Icon name="send" className="h-5 w-5" />}
-              sub={`of ${totalAssignments} total`}
-            />
-          </section>
-
           {error && (
             <div className="glass rounded-3xl border-red-400/30 p-4 text-sm text-red-200">
-              Couldn&apos;t load data: {error}. The API backend isn&apos;t wired up yet.
+              Couldn&apos;t load data: {error}.
             </div>
           )}
 
-          {/* Main grid */}
-          <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-            {/* Assignments by course */}
-            <div className="glass flex flex-col rounded-3xl p-5 xl:col-span-2">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold">Assignments</h2>
-                <span className="text-xs text-white/45">
-                  {loading ? '…' : `${totalAssignments} total`}
-                </span>
-              </div>
-
-              {loading && (
-                <div className="flex flex-1 items-center justify-center py-16 text-sm text-white/40">
-                  Loading…
+          {active === 'overview' && (
+            <>
+              {statCards}
+              <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+                <div className="xl:col-span-2">
+                  <AssignmentsPanel
+                    courses={courses}
+                    grouped={grouped}
+                    loading={loading}
+                    error={error}
+                  />
                 </div>
-              )}
-
-              {!loading && !error && grouped.length === 0 && (
-                <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-center">
-                  <Icon name="assignments" className="h-8 w-8 text-white/25" />
-                  <p className="text-sm text-white/45">
-                    No assignments yet — the Canvas sync will populate this.
-                  </p>
-                </div>
-              )}
-
-              {!loading &&
-                grouped.map((course) => {
-                  const rows = [...course.assignments].sort(
-                    (a, b) =>
-                      (STATUS_ORDER[a.status] ?? 0) - (STATUS_ORDER[b.status] ?? 0) ||
-                      new Date(a.dueAt) - new Date(b.dueAt),
-                  )
-                  return (
-                    <div key={course.id} className="mb-6 last:mb-0">
-                      <div className="mb-2 flex items-baseline gap-2 px-1">
-                        <h3 className="text-sm font-semibold text-white/80">
-                          {course.name}
-                        </h3>
-                        <span className="text-xs text-white/40">
-                          {rows.length} assignment{rows.length === 1 ? '' : 's'}
-                        </span>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        {rows.map((a) => (
-                          <AssignmentRow key={a.id} assignment={a} />
-                        ))}
-                      </div>
+                <div className="flex flex-col gap-6">
+                  <div className="glass rounded-3xl p-5">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h2 className="text-lg font-bold">Courses</h2>
+                      <span className="text-xs text-white/45">
+                        {loading ? '…' : `${totalCourses} active`}
+                      </span>
                     </div>
-                  )
-                })}
-            </div>
-
-            {/* Right column: courses + chat */}
-            <div className="flex flex-col gap-6">
-              <div className="glass rounded-3xl p-5">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lg font-bold">Courses</h2>
-                  <span className="text-xs text-white/45">
-                    {loading ? '…' : `${totalCourses} active`}
-                  </span>
+                    <div className="flex flex-col gap-3">
+                      {grouped.map((course) => (
+                        <CourseProgressCardSmall key={course.id} course={course} />
+                      ))}
+                    </div>
+                  </div>
+                  <ChatPanel />
                 </div>
-                {loading ? (
-                  <div className="py-10 text-center text-sm text-white/40">Loading…</div>
-                ) : grouped.length === 0 ? (
-                  <div className="py-10 text-center text-sm text-white/45">
-                    No courses yet.
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-3">
-                    {grouped.map((course) => (
-                      <CourseProgressCard key={course.id} course={course} />
-                    ))}
-                  </div>
-                )}
-              </div>
+              </section>
+            </>
+          )}
 
-              <ChatPanel />
-            </div>
-          </section>
+          {active === 'assignments' && (
+            <>
+              {statCards}
+              <AssignmentsPanel
+                courses={courses}
+                grouped={grouped}
+                loading={loading}
+                error={error}
+              />
+            </>
+          )}
+
+          {active === 'courses' && (
+            <CoursesView courses={courses} loading={loading} error={error} />
+          )}
+
+          {active === 'calendar' && <CalendarView assignments={assignments} />}
         </main>
+      </div>
+    </div>
+  )
+}
+
+function CourseProgressCardSmall({ course }) {
+  return (
+    <div className="glass-subtle flex items-center gap-3 rounded-2xl p-3 transition-all duration-200 hover:border-white/20">
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-semibold text-white">{course.name}</div>
+        <div className="mt-0.5 text-xs text-white/45">{course.term}</div>
+      </div>
+      <div className="shrink-0 text-right">
+        <div className="text-sm font-bold text-cyan-300">{course.progress}%</div>
       </div>
     </div>
   )
