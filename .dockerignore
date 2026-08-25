@@ -1,0 +1,11 @@
+# Keep secrets out of the build context entirely
+.env
+canvas_session.json
+*.session.json
+
+# Junk
+__pycache__
+*.pyc
+.git
+node_modules
+*.log

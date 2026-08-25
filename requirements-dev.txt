@@ -1,0 +1,4 @@
+# For capture_session.py / test_session.py on your dev PC:
+#   pip install -r requirements-dev.txt
+#   playwright install chromium     <- only needed for capture_session.py (headed browser)
+playwright>=1.49,<2

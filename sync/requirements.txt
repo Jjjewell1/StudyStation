@@ -1,0 +1,6 @@
+# Sync job deps. Note: NO browser needed - the session is replayed through a
+# request-only Playwright APIRequestContext (cookies only), so we can stay on
+# python-slim instead of pulling chromium + OS deps (~1 GB lighter builds).
+sqlalchemy>=2.0.36,<2.1
+psycopg[binary]>=3.2,<4
+playwright>=1.49,<2

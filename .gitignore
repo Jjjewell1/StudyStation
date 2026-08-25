@@ -1,0 +1,17 @@
+# Secrets - never commit
+.env
+canvas_session.json
+*.session.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node (future dashboard)
+node_modules/
+
+# Misc
+*.log
+.DS_Store
