@@ -19,12 +19,14 @@ import logging
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlencode
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import db  # noqa: E402
 from config import Config  # noqa: E402
 from studystation.session import (  # noqa: E402
+    PER_PAGE,
     SessionExpired,
     canvas_base_url,
     iter_pages,
@@ -72,21 +74,26 @@ def pull_everything(cfg: Config) -> tuple[list[dict], list[dict], list[dict]]:
                 n_assign += 1
             log.info("  %-40s assignments: %d", cname[:40], n_assign)
 
-            n_events = 0
-            for e in iter_pages(
-                ctx,
-                f"/api/v1/courses/{cid}/calendar_events",
-                params={
-                    "type": "event",  # assignment-type events would duplicate rows
-                    "start_date": window_start,
-                    "end_date": window_end,
-                },
-            ):
-                e["course_id"] = cid
+        # VCCS 404s the per-course calendar_events endpoint entirely; the
+        # account-level route with context_codes[] filters works fine and
+        # covers every course in one paginated call.
+        query = [
+            ("type", "event"),  # assignment-type events would duplicate rows
+            ("start_date", window_start),
+            ("end_date", window_end),
+            ("per_page", str(PER_PAGE)),
+        ]
+        query += [("context_codes[]", f"course_{int(c['id'])}") for c in courses]
+        cal_url = "/api/v1/calendar_events?" + urlencode(query)
+        for e in iter_pages(ctx, cal_url):
+            cc = e.get("context_code") or ""
+            if cc.startswith("course_"):
+                try:
+                    e["course_id"] = int(cc.split("_", 1)[1])
+                except ValueError:
+                    continue
                 events.append(e)
-                n_events += 1
-            log.info("  %-40s calendar events (%s..%s): %d",
-                     cname[:40], window_start, window_end, n_events)
+        log.info("Calendar events (%s..%s): %d", window_start, window_end, len(events))
 
     return courses, assignments, events
 
