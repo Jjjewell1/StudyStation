@@ -22,6 +22,9 @@ services:
     build:
       context: .
       dockerfile: sync/Dockerfile
+    # tini takes PID1 so supercronic runs as a normal child; supercronic's own
+    # PID1 reaper (v0.2.33) fatals with "Failed to fork exec" in this image.
+    init: true
     depends_on:
       db:
         condition: service_healthy
