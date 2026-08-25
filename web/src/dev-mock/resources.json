@@ -1,0 +1,26 @@
+[
+  {
+    "category": "SWCC Resources",
+    "links": [
+      { "title": "Run Hide Fight", "url": "https://vccs.instructuremedia.com/embed/70396419" },
+      { "title": "Academic Advising", "url": "https://www.sw.edu/admissions/" },
+      { "title": "SWCC Bookstore", "url": "https://www.bkstr.com/swccstore/home" }
+    ]
+  },
+  {
+    "category": "Technology Resources",
+    "links": [
+      { "title": "Microsoft Office 365", "url": "https://office.vccs.edu/" },
+      { "title": "VCCS Support Desk", "url": "https://support.vccs.edu/" },
+      { "title": "Respondus LockDown Browser", "url": "https://www.respondus.com/lockdown/download.php" }
+    ]
+  },
+  {
+    "category": "Canvas Tutorials",
+    "links": [
+      { "title": "Canvas Android App", "url": "https://community.canvaslms.com/t5/Canvas-App-Android-Guide/tkb-p/student_android" },
+      { "title": "Canvas iOS App", "url": "https://community.canvaslms.com/t5/Canvas-App-iOS-Guide/tkb-p/student_ios" },
+      { "title": "Canvas Guides", "url": "https://community.canvaslms.com/docs/DOC-10701" }
+    ]
+  }
+]

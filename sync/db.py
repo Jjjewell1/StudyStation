@@ -71,6 +71,18 @@ sync_runs_t = sa.Table(
     sa.Column("counts", JSONB),
 )
 
+resource_links_t = sa.Table(
+    "resource_links", metadata,
+    sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
+    sa.Column("course_id", sa.BigInteger, nullable=False),
+    sa.Column("category", sa.Text),
+    sa.Column("title", sa.Text, nullable=False),
+    sa.Column("url", sa.Text, nullable=False),
+    sa.Column("sort_order", sa.Integer, nullable=False),
+    sa.Column("synced_at", sa.DateTime(timezone=True)),
+    sa.UniqueConstraint("course_id", "url", name="resource_links_course_url_unique"),
+)
+
 
 def make_engine(database_url: str) -> sa.Engine:
     # Plain postgresql:// makes SQLAlchemy look for psycopg2, which isn't
@@ -235,8 +247,25 @@ def write_sync(engine: sa.Engine, started_at: datetime,
     return counts
 
 
+def write_resource_links(engine: sa.Engine, rows: list[dict]) -> int:
+    """Replace resource links for the given course (re-scraped each sync).
+
+    Simple delete+insert: resource pages are tiny and fully re-scraped, so a
+    clean swap avoids stale-link drift."""
+    if not rows:
+        return 0
+    course_ids = {r["course_id"] for r in rows}
+    with engine.begin() as conn:
+        for cid in course_ids:
+            conn.execute(
+                sa.delete(resource_links_t).where(resource_links_t.c.course_id == cid)
+            )
+        conn.execute(resource_links_t.insert(), rows)
+    return len(rows)
+
+
 def record_failure(engine: sa.Engine, started_at: datetime,
-                   status: str, detail: str) -> None:
+                    status: str, detail: str) -> None:
     try:
         with engine.begin() as conn:
             conn.execute(sync_runs_t.insert().values(

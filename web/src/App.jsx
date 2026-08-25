@@ -5,6 +5,7 @@ import StatCard from './components/StatCard'
 import AssignmentsPanel from './components/AssignmentsPanel'
 import CoursesView from './components/CoursesView'
 import CalendarView from './components/CalendarView'
+import ResourcesView from './components/ResourcesView'
 import ChatPanel from './components/ChatPanel'
 import { Icon } from './components/Icon'
 import { useDashboardData } from './hooks/useDashboardData'
@@ -145,6 +146,8 @@ export default function App() {
           )}
 
           {active === 'calendar' && <CalendarView assignments={assignments} />}
+
+          {active === 'resources' && <ResourcesView />}
         </main>
       </div>
     </div>

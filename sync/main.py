@@ -25,9 +25,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import db  # noqa: E402
 from config import Config  # noqa: E402
+from studystation.resources import extract_links, is_resource_course  # noqa: E402
 from studystation.session import (  # noqa: E402
     PER_PAGE,
     SessionExpired,
+    api_get,
     canvas_base_url,
     iter_pages,
     open_canvas_request,
@@ -44,7 +46,7 @@ BANNER = r"""
 """
 
 
-def pull_everything(cfg: Config) -> tuple[list[dict], list[dict], list[dict]]:
+def pull_everything(cfg: Config) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
     """HTTP phase: fetch all data into memory. Raises SessionExpired."""
     today = datetime.now(timezone.utc).date()
     window_start = (today - timedelta(days=cfg.cal_window_days_back)).isoformat()
@@ -53,6 +55,7 @@ def pull_everything(cfg: Config) -> tuple[list[dict], list[dict], list[dict]]:
     courses: list[dict] = []
     assignments: list[dict] = []
     events: list[dict] = []
+    resource_links: list[dict] = []
 
     with open_canvas_request() as ctx:
         for c in iter_pages(
@@ -73,6 +76,11 @@ def pull_everything(cfg: Config) -> tuple[list[dict], list[dict], list[dict]]:
                 assignments.append(a)
                 n_assign += 1
             log.info("  %-40s assignments: %d", cname[:40], n_assign)
+
+            # Resource hub courses (e.g. SWCC Resources) expose curated links
+            # through module pages instead of assignments.
+            if is_resource_course(c.get("name")):
+                resource_links += pull_resource_links(ctx, cid, cname)
 
         # VCCS 404s the per-course calendar_events endpoint entirely; the
         # account-level route with context_codes[] filters works fine and
@@ -95,7 +103,43 @@ def pull_everything(cfg: Config) -> tuple[list[dict], list[dict], list[dict]]:
                 events.append(e)
         log.info("Calendar events (%s..%s): %d", window_start, window_end, len(events))
 
-    return courses, assignments, events
+    return courses, assignments, events, resource_links
+
+
+def pull_resource_links(ctx, cid: int, cname: str) -> list[dict]:
+    """Scrape link pages from a resource course's modules into flat rows."""
+    rows: list[dict] = []
+    try:
+        modules = api_get(ctx, f"/api/v1/courses/{cid}/modules", params={"include[]": "items"})
+    except Exception as exc:  # noqa: BLE001 - a dead resource hub shouldn't fail the sync
+        log.warning("  resource modules for %s failed: %s", cname, exc)
+        return rows
+
+    order = 0
+    for mod in modules:
+        for item in (mod or {}).get("items", []) or []:
+            if (item or {}).get("type") != "Page":
+                continue
+            page_name = item.get("title")
+            if not page_name:
+                continue
+            try:
+                page = api_get(ctx, f"/api/v1/courses/{cid}/pages/{page_name}")
+            except Exception as exc:  # noqa: BLE001
+                log.warning("  resource page %r failed: %s", page_name, exc)
+                continue
+            body = (page or {}).get("body", "")
+            for link in extract_links(body):
+                rows.append({
+                    "course_id": cid,
+                    "category": page_name,
+                    "title": link["title"],
+                    "url": link["url"],
+                    "sort_order": order,
+                })
+                order += 1
+    log.info("  %-40s resource links: %d", cname[:40], len(rows))
+    return rows
 
 
 def main() -> int:
@@ -123,12 +167,14 @@ def main() -> int:
         db.ensure_schema(engine)
         log.info("Schema OK (pgvector + tables verified)")
 
-        courses, assignments, events = pull_everything(cfg)
+        courses, assignments, events, resource_links = pull_everything(cfg)
         if not courses:
             log.warning("No active courses returned - nothing to sync. "
                         "Check enrollment_state or the account used to capture the session.")
 
         counts = db.write_sync(engine, started_at, courses, assignments, events)
+        n_links = db.write_resource_links(engine, resource_links)
+        counts["resource_links"] = n_links
         log.info("SYNC COMPLETE in %.1fs: %s",
                  (datetime.now(timezone.utc) - started_at).total_seconds(), counts)
         return 0

@@ -16,7 +16,7 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 
-from db import fetch_assignments, fetch_courses, make_engine
+from db import fetch_assignments, fetch_courses, fetch_resource_links, make_engine
 
 DATABASE_URL = (os.environ.get("DATABASE_URL") or "").strip()
 if not DATABASE_URL:
@@ -48,6 +48,14 @@ def assignments() -> list[dict]:
         raise HTTPException(status_code=500, detail=f"assignments query failed: {exc}") from exc
 
 
+@app.get("/api/resources")
+def resources() -> list[dict]:
+    try:
+        return fetch_resource_links(engine)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"resources query failed: {exc}") from exc
+
+
 @app.get("/api")
 def api_root() -> JSONResponse:
-    return JSONResponse({"endpoints": ["/api/courses", "/api/assignments", "/api/health"]})
+    return JSONResponse({"endpoints": ["/api/courses", "/api/assignments", "/api/resources", "/api/health"]})

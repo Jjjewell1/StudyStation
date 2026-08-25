@@ -6,6 +6,7 @@ const NAV = [
   { id: 'assignments', label: 'Assignments', icon: 'assignments' },
   { id: 'courses', label: 'Courses', icon: 'courses' },
   { id: 'calendar', label: 'Calendar', icon: 'calendar' },
+  { id: 'resources', label: 'Resources', icon: 'resources' },
 ]
 
 export default function Sidebar({ active = 'overview', onNavigate }) {

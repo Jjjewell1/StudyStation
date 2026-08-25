@@ -16,3 +16,4 @@ async function getJSON(path) {
 
 export const getCourses = () => getJSON('/courses')
 export const getAssignments = () => getJSON('/assignments')
+export const getResources = () => getJSON('/resources')

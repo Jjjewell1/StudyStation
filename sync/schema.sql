@@ -82,6 +82,19 @@ CREATE TABLE IF NOT EXISTS material_chunks (
 CREATE INDEX IF NOT EXISTS idx_chunks_embedding
     ON material_chunks USING hnsw (embedding vector_cosine_ops);
 
+-- Curated links scraped from "resource" courses (e.g. SWCC Resources):
+-- bookstore, tech support, tutorials, etc. Re-scraped each sync.
+CREATE TABLE IF NOT EXISTS resource_links (
+    id          BIGSERIAL PRIMARY KEY,
+    course_id   BIGINT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    category    TEXT,                      -- page title, e.g. 'Canvas Tutorials'
+    title       TEXT NOT NULL,             -- link text
+    url         TEXT NOT NULL,
+    sort_order  INT NOT NULL DEFAULT 0,
+    synced_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (course_id, url)
+);
+
 -- Observability for the nightly cron: one row per run attempt.
 CREATE TABLE IF NOT EXISTS sync_runs (
     id         BIGSERIAL PRIMARY KEY,

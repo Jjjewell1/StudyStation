@@ -70,6 +70,27 @@ const paths = {
       <path d="M7.7 16.3l-2.1 2.1" />
     </>
   ),
+  book: (
+    <>
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5Z" />
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 8H20" />
+    </>
+  ),
+  resources: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18" />
+      <path d="M12 3a15 15 0 0 1 0 18" />
+      <path d="M12 3a15 15 0 0 0 0 18" />
+    </>
+  ),
+  external: (
+    <>
+      <path d="M14 4h6v6" />
+      <path d="M20 4 11 13" />
+      <path d="M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5" />
+    </>
+  ),
 }
 
 export function Icon({ name, className = 'w-5 h-5' }) {

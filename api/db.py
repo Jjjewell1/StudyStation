@@ -9,6 +9,8 @@ shape the frontend expects:
 
 from __future__ import annotations
 
+import re
+
 import sqlalchemy as sa
 
 metadata = sa.MetaData()
@@ -38,6 +40,15 @@ assignment_status_t = sa.Table(
     sa.Column("status", sa.Text),
 )
 
+resource_links_t = sa.Table(
+    "resource_links", metadata,
+    sa.Column("course_id", sa.BigInteger),
+    sa.Column("category", sa.Text),
+    sa.Column("title", sa.Text),
+    sa.Column("url", sa.Text),
+    sa.Column("sort_order", sa.Integer),
+)
+
 
 def make_engine(database_url: str) -> sa.Engine:
     if database_url.startswith("postgresql://"):
@@ -51,7 +62,7 @@ def _iso(dt) -> str | None:
 
 
 def _short_label(code: str | None, name: str) -> str:
-    """Compact display label, e.g. 'SW294.ITE.140.W1.FA26' -> 'ITE 140'.
+    """Compact display label, e.g. 'SW294.ITE.140.W1.FA26' -> 'ITE - 140'.
 
     Canvas course_code is a dotted SIS string; extract the subject token +
     numeric token. Falls back to the course name when there's no numeric part
@@ -61,7 +72,29 @@ def _short_label(code: str | None, name: str) -> str:
     parts = code.split(".")
     for i, tok in enumerate(parts):
         if tok.isalpha() and 2 <= len(tok) <= 5 and i + 1 < len(parts) and parts[i + 1].isdigit():
-            return f"{tok} {parts[i + 1]}"
+            return f"{tok} - {parts[i + 1]}"
+    return name
+
+
+def _subtext(code: str | None, name: str) -> str:
+    """Course name minus its leading 'SUBJ NNN' prefix.
+
+    e.g. 'ITN 106 Microcomputer Operating System' -> 'Microcomputer Operating
+    System'. Falls back to the full name when there's no subject+number token
+    (or the name doesn't carry the prefix, e.g. 'English 111')."""
+    if not code:
+        return name
+    parts = code.split(".")
+    for i, tok in enumerate(parts):
+        if tok.isalpha() and 2 <= len(tok) <= 5 and i + 1 < len(parts) and parts[i + 1].isdigit():
+            prefix = f"{tok} {parts[i + 1]}"
+            # strip "SUBJ NNN" (space or dash) from the start of the name
+            m = re.match(rf"^\s*{re.escape(tok)}\s*[- ]\s*{re.escape(parts[i + 1])}\s*[-:]*\s*", name, re.IGNORECASE)
+            if m:
+                stripped = name[m.end():].strip()
+                if stripped:
+                    return stripped
+            return name
     return name
 
 
@@ -97,7 +130,12 @@ def fetch_courses(engine: sa.Engine) -> list[dict]:
                 assignments_t, assignments_t.c.course_id == courses_t.c.id
             ).outerjoin(submitted, submitted.c.course_id == courses_t.c.id)
         )
-        .where(courses_t.c.is_active.is_(True))
+        .where(
+            courses_t.c.is_active.is_(True),
+            # Resource-hub courses (e.g. SWCC Resources) aren't real classes;
+            # their links surface via /api/resources instead.
+            ~courses_t.c.name.ilike("%resource%"),
+        )
         .group_by(courses_t.c.id, courses_t.c.name, courses_t.c.course_code, courses_t.c.term_name, submitted.c.n)
         .order_by(courses_t.c.name)
     )
@@ -115,10 +153,31 @@ def fetch_courses(engine: sa.Engine) -> list[dict]:
             "name": r["name"],
             "code": r["course_code"],
             "short": _short_label(r["course_code"], r["name"]),
+            "subtext": _subtext(r["course_code"], r["name"]),
             "term": r["term_name"] or "",
             "progress": progress,
         })
     return out
+
+
+def fetch_resource_links(engine: sa.Engine) -> list[dict]:
+    """Curated links from resource-hub courses, grouped by category."""
+    stmt = (
+        sa.select(
+            resource_links_t.c.category,
+            resource_links_t.c.title,
+            resource_links_t.c.url,
+        )
+        .order_by(resource_links_t.c.category, resource_links_t.c.sort_order)
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(stmt).mappings().all()
+
+    groups: dict[str, list[dict]] = {}
+    for r in rows:
+        cat = r["category"] or "Other"
+        groups.setdefault(cat, []).append({"title": r["title"], "url": r["url"]})
+    return [{"category": k, "links": v} for k, v in groups.items()]
 
 
 def fetch_assignments(engine: sa.Engine) -> list[dict]:
