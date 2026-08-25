@@ -1,4 +1,11 @@
-# Google API deps for the dashboard backend.
+# Read-only API deps. Matches the sync job's dialect (psycopg3) so both
+# services talk to Postgres the same way.
+sqlalchemy>=2.0.36,<2.1
+psycopg[binary]>=3.2,<4
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+
+# Google API integrations (calendar, tasks, contacts, gmail)
 google-auth>=2.35,<3
 google-auth-oauthlib>=1.2,<2
 google-auth-httplib2>=0.2,<1
