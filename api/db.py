@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 metadata = sa.MetaData()
 
@@ -233,7 +234,7 @@ def set_assignment_status(engine: sa.Engine, assignment_id: int, status: str) ->
         raise ValueError(f"invalid status {status!r} (expected one of {VALID_STATUSES})")
     with engine.begin() as conn:
         conn.execute(
-            sa.insert(assignment_status_t).values(
+            pg_insert(assignment_status_t).values(
                 assignment_id=assignment_id,
                 status=status,
                 updated_by="dashboard",
