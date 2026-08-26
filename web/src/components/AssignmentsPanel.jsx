@@ -11,7 +11,7 @@ import {
 
 const STATUS_ORDER = { not_started: 0, drafted: 1, submitted: 2 }
 
-export default function AssignmentsPanel({ courses, grouped, loading, error, filter, onClearFilter }) {
+export default function AssignmentsPanel({ courses, grouped, loading, error, filter, onClearFilter, onStatusChange }) {
   const [selected, setSelected] = useState('all')
   const [openWeek, setOpenWeek] = useState(null)
 
@@ -170,7 +170,12 @@ export default function AssignmentsPanel({ courses, grouped, loading, error, fil
                   <div className="border-t border-white/10 px-3 py-2">
                     <div className="flex flex-col gap-1.5">
                       {rows.map((a) => (
-                        <AssignmentRow key={a.id} assignment={a} courseName={a.courseName} />
+                        <AssignmentRow
+                          key={a.id}
+                          assignment={a}
+                          courseName={a.courseName}
+                          onStatusChange={onStatusChange}
+                        />
                       ))}
                     </div>
                   </div>

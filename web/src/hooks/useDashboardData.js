@@ -37,6 +37,10 @@ export function useDashboardData() {
   )
   const completed = assignments.filter((a) => a.status === 'submitted')
 
+  function updateStatus(id, status) {
+    setAssignments((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)))
+  }
+
   return {
     courses,
     assignments,
@@ -47,6 +51,7 @@ export function useDashboardData() {
       completed: completed.length,
     },
     filtered: { overdue, dueToday, dueThisWeek, completed },
+    updateStatus,
     loading,
     error,
   }

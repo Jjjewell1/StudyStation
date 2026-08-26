@@ -81,7 +81,7 @@ export default function App() {
 }
 
 function Dashboard({ onLogout }) {
-  const { courses, assignments, stats, filtered, loading, error } = useDashboardData()
+  const { courses, assignments, stats, filtered, loading, error, updateStatus } = useDashboardData()
   const [active, setActive] = useState('overview')
   const [filterKey, setFilterKey] = useState(null)
   const google = useGoogleStatus()
@@ -188,6 +188,7 @@ function Dashboard({ onLogout }) {
                     grouped={grouped}
                     loading={loading}
                     error={error}
+                    onStatusChange={updateStatus}
                   />
                 </div>
                 <div className="flex flex-col gap-6">
@@ -221,6 +222,7 @@ function Dashboard({ onLogout }) {
                 error={error}
                 filter={filterKey ? FILTERS[filterKey] : null}
                 onClearFilter={() => setFilterKey(null)}
+                onStatusChange={updateStatus}
               />
             </>
           )}

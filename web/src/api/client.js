@@ -66,6 +66,8 @@ export const logout = () => sendJSON('/auth/logout', 'POST')
 export const getCourses = () => getJSON('/courses')
 export const getAssignments = () => getJSON('/assignments')
 export const getResources = () => getJSON('/resources')
+export const setAssignmentStatus = (id, status) =>
+  sendJSON(`/assignments/${id}/status`, 'PATCH', { status })
 
 // Google
 export const getGoogleStatus = () => getJSON('/google/status')

@@ -16,7 +16,13 @@ import os
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from db import fetch_assignments, fetch_courses, fetch_resource_links, make_engine
+from db import (
+    fetch_assignments,
+    fetch_courses,
+    fetch_resource_links,
+    make_engine,
+    set_assignment_status,
+)
 import auth
 import google_client
 import google_routes
@@ -107,6 +113,18 @@ def assignments() -> list[dict]:
         return fetch_assignments(engine)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"assignments query failed: {exc}") from exc
+
+
+@app.patch("/api/assignments/{assignment_id}/status")
+def update_assignment_status(assignment_id: int, body: dict):
+    status = (body or {}).get("status")
+    try:
+        result = set_assignment_status(engine, assignment_id, status)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"status update failed: {exc}") from exc
+    return {"id": str(assignment_id), "status": result}
 
 
 @app.get("/api/resources")

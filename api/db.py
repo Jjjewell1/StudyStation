@@ -38,6 +38,9 @@ assignment_status_t = sa.Table(
     "assignment_status", metadata,
     sa.Column("assignment_id", sa.BigInteger),
     sa.Column("status", sa.Text),
+    sa.Column("notes", sa.Text),
+    sa.Column("updated_by", sa.Text),
+    sa.Column("updated_at", sa.DateTime(timezone=True)),
 )
 
 resource_links_t = sa.Table(
@@ -216,3 +219,28 @@ def fetch_assignments(engine: sa.Engine) -> list[dict]:
         }
         for r in rows
     ]
+
+
+VALID_STATUSES = ("not_started", "drafted", "submitted")
+
+
+def set_assignment_status(engine: sa.Engine, assignment_id: int, status: str) -> str:
+    """Upsert the local study status for an assignment. Returns the status.
+
+    This is the one table the sync job deliberately never touches, so the
+    dashboard owns it. status is one of not_started/drafted/submitted."""
+    if status not in VALID_STATUSES:
+        raise ValueError(f"invalid status {status!r} (expected one of {VALID_STATUSES})")
+    with engine.begin() as conn:
+        conn.execute(
+            sa.insert(assignment_status_t).values(
+                assignment_id=assignment_id,
+                status=status,
+                updated_by="dashboard",
+                updated_at=sa.func.now(),
+            ).on_conflict_do_update(
+                index_elements=["assignment_id"],
+                set_={"status": status, "updated_by": "dashboard", "updated_at": sa.func.now()},
+            )
+        )
+    return status
