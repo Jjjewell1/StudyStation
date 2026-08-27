@@ -17,6 +17,7 @@ import os
 from datetime import datetime, timezone
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -119,7 +120,7 @@ def _save(engine: sa.Engine, email: str, **fields) -> None:
     fields["updated_at"] = datetime.now(timezone.utc)
     with engine.begin() as conn:
         conn.execute(
-            sa.insert(google_tokens_t).values(email=email, **fields)
+            pg_insert(google_tokens_t).values(email=email, **fields)
             .on_conflict_do_update(index_elements=["email"], set_=fields)
         )
 
@@ -139,7 +140,7 @@ def _set_state(engine: sa.Engine, state: str | None) -> None:
             conn.execute(google_state_t.delete())
         else:
             conn.execute(
-                sa.insert(google_state_t).values(id=1, state=state)
+                pg_insert(google_state_t).values(id=1, state=state)
                 .on_conflict_do_update(index_elements=["id"], set_={"state": state})
             )
 
