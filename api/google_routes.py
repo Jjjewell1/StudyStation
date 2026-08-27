@@ -31,6 +31,8 @@ def auth(request: Request):
         url = g.build_auth_url(_engine(request))
     except g.GoogleNotConfigured as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - surface the real failure to the browser
+        raise HTTPException(status_code=500, detail=f"auth url build failed: {exc}") from exc
     return RedirectResponse(url)
 
 
