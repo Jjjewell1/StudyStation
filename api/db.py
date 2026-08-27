@@ -195,7 +195,10 @@ def fetch_resource_links(engine: sa.Engine) -> list[dict]:
 
 
 def fetch_assignments(engine: sa.Engine) -> list[dict]:
-    """All assignments joined with local study status (default not_started)."""
+    """Assignments for ACTIVE courses, joined with local study status.
+
+    Joining courses_t and filtering is_active ensures assignments for dropped
+    courses (e.g. a class you withdrew from) disappear alongside the course."""
     stmt = (
         sa.select(
             assignments_t.c.id,
@@ -207,11 +210,14 @@ def fetch_assignments(engine: sa.Engine) -> list[dict]:
             sa.func.coalesce(assignment_status_t.c.status, "not_started").label("status"),
         )
         .select_from(
-            assignments_t.outerjoin(
+            assignments_t
+            .join(courses_t, courses_t.c.id == assignments_t.c.course_id)
+            .outerjoin(
                 assignment_status_t,
                 assignment_status_t.c.assignment_id == assignments_t.c.id,
             )
         )
+        .where(courses_t.c.is_active.is_(True))
         .order_by(assignments_t.c.due_at.asc().nulls_last(), assignments_t.c.name)
     )
 
