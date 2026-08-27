@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'react'
 import GoogleConnect, { useGoogleStatus } from './GoogleConnect'
 import { Icon } from './Icon'
-import { getSyncStatus, triggerSync } from '@/api/client'
+import {
+  getSyncStatus,
+  triggerSync,
+  dropCourse,
+  restoreCourse,
+  getDroppedCourses,
+} from '@/api/client'
 
 const TABS = [
   { id: 'sync', label: 'Sync', icon: 'calendarCheck' },
+  { id: 'classes', label: 'Classes', icon: 'courses' },
   { id: 'google', label: 'Google', icon: 'contacts' },
   { id: 'account', label: 'Account', icon: 'tasks' },
 ]
@@ -14,91 +21,42 @@ function GoogleGuide() {
     <div className="space-y-4 text-sm text-white/70">
       <p className="text-white/50">
         Connect your Google account to bring Calendar, Contacts, Tasks, and Gmail into
-        StudyStation. This takes a few one-time steps in the Google Cloud Console.
+        StudyStation. Just sign in with your Google account — no setup needed on your end.
       </p>
 
       <ol className="list-decimal space-y-2 pl-5">
         <li>
-          Go to the{' '}
-          <a
-            href="https://console.cloud.google.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-cyan-300 underline hover:text-cyan-200"
-          >
-            Google Cloud Console
-          </a>{' '}
-          and create a project named <span className="font-semibold">StudyStation</span>.
+          Click <span className="font-semibold">Connect</span> above.
         </li>
         <li>
-          Enable these APIs (APIs &amp; Services → Library):{' '}
-          <span className="text-white/90">Google Calendar API</span>,{' '}
-          <span className="text-white/90">People API</span>,{' '}
-          <span className="text-white/90">Tasks API</span>,{' '}
-          <span className="text-white/90">Gmail API</span>.
+          Sign in with your Google account (the email you want to connect).
         </li>
         <li>
-          Set up the{' '}
-          <a
-            href="https://console.cloud.google.com/apis/credentials/consent"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-cyan-300 underline hover:text-cyan-200"
-          >
-            OAuth consent screen
-          </a>{' '}
-          (External type), add your own email as a test user, and add these scopes:
-          <ul className="ml-5 mt-1 list-disc space-y-0.5 text-white/50">
-            <li>https://www.googleapis.com/auth/calendar</li>
-            <li>https://www.googleapis.com/auth/contacts</li>
-            <li>https://www.googleapis.com/auth/tasks</li>
-            <li>https://www.googleapis.com/auth/gmail.modify</li>
-          </ul>
-        </li>
-        <li>
-          Create an{' '}
-          <a
-            href="https://console.cloud.google.com/apis/credentials"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-cyan-300 underline hover:text-cyan-200"
-          >
-            OAuth client ID
-          </a>{' '}
-          of type <span className="font-semibold">Web application</span> and add this
-          redirect URI:
+          Approve the permissions (calendar, contacts, tasks, and Gmail).
         </li>
       </ol>
 
-      <div className="glass-subtle flex items-center justify-between gap-3 rounded-2xl px-4 py-3">
-        <code className="break-all text-xs text-white/70">
-          https://studystation.jewellcore.com/api/google/callback
-        </code>
-        <button
-          onClick={() => navigator.clipboard?.writeText('https://studystation.jewellcore.com/api/google/callback')}
-          className="shrink-0 rounded-xl bg-white/10 px-3 py-1.5 text-xs text-white/70 transition-colors hover:bg-white/20"
-        >
-          Copy
-        </button>
-      </div>
-
-      <p>
-        Finally, paste the <span className="font-semibold">Client ID</span> and{' '}
-        <span className="font-semibold">Client Secret</span> into your deployment's{' '}
-        <code className="text-white/70">GOOGLE_CLIENT_ID</code> and{' '}
-        <code className="text-white/70">GOOGLE_CLIENT_SECRET</code> environment variables,
-        then click <span className="font-semibold">Connect</span> below.
+      <p className="text-xs text-white/45">
+        This is managed by the app owner. The OAuth client and these scopes are configured
+        once in Google Cloud:
       </p>
+      <ul className="ml-5 list-disc space-y-0.5 text-xs text-white/45">
+        <li>https://www.googleapis.com/auth/calendar</li>
+        <li>https://www.googleapis.com/auth/contacts</li>
+        <li>https://www.googleapis.com/auth/tasks</li>
+        <li>https://www.googleapis.com/auth/gmail.modify</li>
+      </ul>
     </div>
   )
 }
 
-export default function SettingsView({ onLogout }) {
+export default function SettingsView({ onLogout, courses, onDataChanged }) {
   const [tab, setTab] = useState('sync')
   const google = useGoogleStatus()
   const [syncInfo, setSyncInfo] = useState(null)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState(null)
+  const [dropped, setDropped] = useState(null) // { dropped: [], log: [] }
 
   function refreshSyncStatus() {
     getSyncStatus()
@@ -106,8 +64,15 @@ export default function SettingsView({ onLogout }) {
       .catch(() => {})
   }
 
+  function refreshDropped() {
+    getDroppedCourses()
+      .then(setDropped)
+      .catch(() => {})
+  }
+
   useEffect(() => {
     refreshSyncStatus()
+    refreshDropped()
   }, [])
 
   async function syncNow() {
@@ -125,13 +90,28 @@ export default function SettingsView({ onLogout }) {
     }
   }
 
+  async function doDrop(id) {
+    await dropCourse(id)
+    refreshDropped()
+    onDataChanged?.()
+  }
+
+  async function doRestore(id) {
+    await restoreCourse(id)
+    refreshDropped()
+    onDataChanged?.()
+  }
+
+  const droppedCourses = dropped?.dropped ?? []
+  const dropLog = dropped?.log ?? []
+
   return (
     <section className="glass rounded-3xl p-5">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-bold">Settings</h2>
       </div>
 
-      <div className="mb-5 flex gap-2">
+      <div className="mb-5 flex flex-wrap gap-2">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -223,12 +203,104 @@ export default function SettingsView({ onLogout }) {
         </div>
       )}
 
+      {tab === 'classes' && (
+        <div className="space-y-5">
+          <div>
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/40">
+              Active classes
+            </div>
+            <div className="flex flex-col gap-2">
+              {courses.map((c) => (
+                <div
+                  key={c.id}
+                  className="glass-subtle flex items-center gap-3 rounded-2xl p-3"
+                >
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-indigo-500/30 to-cyan-400/20 text-cyan-300">
+                    <Icon name="book" className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-white">{c.short}</div>
+                    <div className="truncate text-xs text-white/45">{c.name}</div>
+                  </div>
+                  <button
+                    onClick={() => doDrop(c.id)}
+                    className="shrink-0 rounded-xl bg-white/5 px-3 py-1.5 text-xs text-white/60 transition-colors hover:bg-red-500/15 hover:text-red-300"
+                  >
+                    Drop
+                  </button>
+                </div>
+              ))}
+              {courses.length === 0 && (
+                <div className="py-4 text-center text-sm text-white/45">No active classes.</div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/40">
+              Dropped classes
+            </div>
+            <div className="flex flex-col gap-2">
+              {droppedCourses.map((c) => (
+                <div
+                  key={c.id}
+                  className="glass-subtle flex items-center gap-3 rounded-2xl p-3 opacity-80"
+                >
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/10 text-white/50">
+                    <Icon name="book" className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-white/70">{c.short}</div>
+                    <div className="truncate text-xs text-white/40">{c.name}</div>
+                  </div>
+                  <button
+                    onClick={() => doRestore(c.id)}
+                    className="shrink-0 rounded-xl bg-white/5 px-3 py-1.5 text-xs text-white/60 transition-colors hover:bg-emerald-500/15 hover:text-emerald-300"
+                  >
+                    Restore
+                  </button>
+                </div>
+              ))}
+              {droppedCourses.length === 0 && (
+                <div className="py-4 text-center text-sm text-white/45">No dropped classes.</div>
+              )}
+            </div>
+          </div>
+
+          {dropLog.length > 0 && (
+            <div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/40">
+                Drop history
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {dropLog.map((l, i) => (
+                  <div
+                    key={`${l.courseId}-${l.droppedAt}-${i}`}
+                    className="glass-subtle flex items-center gap-3 rounded-xl px-3 py-2 text-xs"
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${l.dropped ? 'bg-red-400' : 'bg-emerald-400'}`}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-white/70">{l.name}</span>
+                    <span className="shrink-0 text-white/40">
+                      {l.dropped
+                        ? `dropped ${new Date(l.droppedAt).toLocaleDateString()}`
+                        : `restored ${new Date(l.restoredAt).toLocaleDateString()}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {tab === 'google' && (
         <div className="space-y-6">
           <GoogleConnect status={google} onChanged={google.refresh} />
           <div className="border-t border-white/10 pt-5">
             <h3 className="mb-3 text-sm font-semibold text-white/80">
-              Connection guide
+              How to connect
             </h3>
             <GoogleGuide />
           </div>

@@ -1,8 +1,8 @@
 """Google OAuth + API service factory for the StudyStation backend.
 
-Single-user: one stored token row (google_tokens, id=1). The OAuth flow is
-authorization-code with offline access so we get a refresh token that outlives
-the browser session.
+Multi-user: tokens are stored keyed by the connected Google email, so a new
+user just signs in with their account (the OAuth client is configured once by
+the app owner via GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).
 
 Services built here (scopes configured read+write):
   - calendar  (Google Calendar)
@@ -37,13 +37,17 @@ metadata = sa.MetaData()
 
 google_tokens_t = sa.Table(
     "google_tokens", metadata,
-    sa.Column("id", sa.Integer, primary_key=True, default=1),
-    sa.Column("email", sa.Text),
+    sa.Column("email", sa.Text, primary_key=True),
     sa.Column("refresh_token", sa.Text),
     sa.Column("access_token", sa.Text),
     sa.Column("token_expiry", sa.DateTime(timezone=True)),
-    sa.Column("state", sa.Text),
     sa.Column("updated_at", sa.DateTime(timezone=True)),
+)
+
+google_state_t = sa.Table(
+    "google_state", metadata,
+    sa.Column("id", sa.Integer, primary_key=True, default=1),
+    sa.Column("state", sa.Text),
 )
 
 
@@ -78,45 +82,72 @@ def redirect_uri() -> str:
 
 
 def ensure_schema(engine: sa.Engine) -> None:
-    """Create the google_tokens table if missing (idempotent)."""
+    """Create the google_tokens + google_state tables if missing (idempotent)."""
     with engine.begin() as conn:
         conn.execute(sa.text(
             "CREATE TABLE IF NOT EXISTS google_tokens ("
-            "  id INTEGER PRIMARY KEY DEFAULT 1,"
-            "  email TEXT,"
+            "  email TEXT PRIMARY KEY,"
             "  refresh_token TEXT,"
             "  access_token TEXT,"
             "  token_expiry TIMESTAMPTZ,"
-            "  state TEXT,"
             "  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()"
+            ")"
+        ))
+        conn.execute(sa.text(
+            "CREATE TABLE IF NOT EXISTS google_state ("
+            "  id INTEGER PRIMARY KEY DEFAULT 1,"
+            "  state TEXT"
             ")"
         ))
 
 
-def _load(engine: sa.Engine) -> dict | None:
+def _load(engine: sa.Engine, email: str | None = None) -> dict | None:
     with engine.connect() as conn:
-        row = conn.execute(
-            google_tokens_t.select().where(google_tokens_t.c.id == 1)
-        ).mappings().first()
+        if email:
+            row = conn.execute(
+                google_tokens_t.select().where(google_tokens_t.c.email == email)
+            ).mappings().first()
+        else:
+            # Default account = most recently updated.
+            row = conn.execute(
+                google_tokens_t.select().order_by(google_tokens_t.c.updated_at.desc()).limit(1)
+            ).mappings().first()
     return dict(row) if row else None
 
 
-def _save(engine: sa.Engine, **fields) -> None:
+def _save(engine: sa.Engine, email: str, **fields) -> None:
     fields["updated_at"] = datetime.now(timezone.utc)
     with engine.begin() as conn:
         conn.execute(
-            sa.insert(google_tokens_t).values(id=1, **fields)
-            .on_conflict_do_update(index_elements=["id"], set_=fields)
+            sa.insert(google_tokens_t).values(email=email, **fields)
+            .on_conflict_do_update(index_elements=["email"], set_=fields)
         )
 
 
-def _upsert_field(engine: sa.Engine, field: str, value) -> None:
+def _upsert_field(engine: sa.Engine, email: str, field: str, value) -> None:
     with engine.begin() as conn:
         conn.execute(
             sa.update(google_tokens_t)
-            .where(google_tokens_t.c.id == 1)
+            .where(google_tokens_t.c.email == email)
             .values({field: value, "updated_at": datetime.now(timezone.utc)})
         )
+
+
+def _set_state(engine: sa.Engine, state: str | None) -> None:
+    with engine.begin() as conn:
+        if state is None:
+            conn.execute(google_state_t.delete())
+        else:
+            conn.execute(
+                sa.insert(google_state_t).values(id=1, state=state)
+                .on_conflict_do_update(index_elements=["id"], set_={"state": state})
+            )
+
+
+def _get_state(engine: sa.Engine) -> str | None:
+    with engine.connect() as conn:
+        row = conn.execute(google_state_t.select().where(google_state_t.c.id == 1)).first()
+    return row[0] if row else None
 
 
 def build_auth_url(engine: sa.Engine) -> str:
@@ -127,27 +158,32 @@ def build_auth_url(engine: sa.Engine) -> str:
         prompt="consent",  # re-consent ensures a fresh refresh token each link
         include_granted_scopes="true",
     )
-    _upsert_field(engine, "state", state)
+    _set_state(engine, state)
     return auth_url
 
 
-def exchange_code(engine: sa.Engine, code: str, state: str | None) -> None:
-    """Exchange the OAuth code for tokens and persist them."""
-    stored = _load(engine) or {}
-    if state and stored.get("state") and state != stored["state"]:
+def exchange_code(engine: sa.Engine, code: str, state: str | None) -> str:
+    """Exchange the OAuth code for tokens, persist keyed by email."""
+    stored = _get_state(engine)
+    if state and stored and state != stored:
         raise RuntimeError("OAuth state mismatch - possible CSRF, retry the link.")
     flow = Flow.from_client_config(_client_config(), scopes=SCOPES, redirect_uri=redirect_uri())
     flow.fetch_token(code=code)
     creds = flow.credentials
     email = creds.id_token and _email_from_id_token(creds.id_token)
+    if not email:
+        email = _email_from_tokeninfo(creds.token)
+    if not email:
+        raise RuntimeError("could not determine the Google account email")
     _save(
         engine,
+        email,
         refresh_token=creds.refresh_token,
         access_token=creds.token,
         token_expiry=creds.expiry,
-        email=email,
-        state=None,
     )
+    _set_state(engine, None)
+    return email
 
 
 def _email_from_id_token(id_token: str) -> str | None:
@@ -161,10 +197,21 @@ def _email_from_id_token(id_token: str) -> str | None:
         return None
 
 
-def get_credentials(engine: sa.Engine) -> Credentials:
+def _email_from_tokeninfo(access_token: str) -> str | None:
+    try:
+        import json as _json
+        import urllib.request
+        url = f"https://oauth2.googleapis.com/tokeninfo?access_token={access_token}"
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            return _json.loads(resp.read().decode("utf-8")).get("email")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def get_credentials(engine: sa.Engine, email: str | None = None) -> Credentials:
     """Return refreshed, valid Credentials (persisting any refresh)."""
     cfg = _client_config()["web"]
-    row = _load(engine)
+    row = _load(engine, email)
     if not row or not row.get("refresh_token"):
         raise GoogleNotConnected("Google is not connected - visit /api/google/auth first.")
     creds = Credentials(
@@ -179,48 +226,46 @@ def get_credentials(engine: sa.Engine) -> Credentials:
         creds.refresh(Request())
         _save(
             engine,
+            row["email"],
             refresh_token=creds.refresh_token,
             access_token=creds.token,
             token_expiry=creds.expiry,
-            email=row.get("email"),
         )
     return creds
 
 
-def _build(engine: sa.Engine, name: str, version: str):
-    creds = get_credentials(engine)
+def _build(engine: sa.Engine, name: str, version: str, email: str | None = None):
+    creds = get_credentials(engine, email)
     return build(name, version, credentials=creds, cache_discovery=False)
 
 
-def calendar_service(engine: sa.Engine):
-    return _build(engine, "calendar", "v3")
+def calendar_service(engine: sa.Engine, email: str | None = None):
+    return _build(engine, "calendar", "v3", email)
 
 
-def tasks_service(engine: sa.Engine):
-    return _build(engine, "tasks", "v1")
+def tasks_service(engine: sa.Engine, email: str | None = None):
+    return _build(engine, "tasks", "v1", email)
 
 
-def people_service(engine: sa.Engine):
-    return _build(engine, "people", "v1")
+def people_service(engine: sa.Engine, email: str | None = None):
+    return _build(engine, "people", "v1", email)
 
 
-def gmail_service(engine: sa.Engine):
-    return _build(engine, "gmail", "v1")
+def gmail_service(engine: sa.Engine, email: str | None = None):
+    return _build(engine, "gmail", "v1", email)
 
 
-def get_email(engine: sa.Engine) -> str | None:
+def connected_emails(engine: sa.Engine) -> list[str]:
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sa.select(google_tokens_t.c.email).order_by(google_tokens_t.c.updated_at.desc())
+        ).all()
+    return [r[0] for r in rows]
+
+
+def default_email(engine: sa.Engine) -> str | None:
     row = _load(engine)
-    if row and row.get("email"):
-        return row["email"]
-    # Fall back to the Gmail profile when email wasn't captured at link time.
-    try:
-        profile = gmail_service(engine).users().getProfile(userId="me").execute()
-        email = profile.get("emailAddress")
-        if email:
-            _upsert_field(engine, "email", email)
-        return email
-    except Exception:  # noqa: BLE001
-        return None
+    return row["email"] if row else None
 
 
 def is_connected(engine: sa.Engine) -> bool:
@@ -228,6 +273,9 @@ def is_connected(engine: sa.Engine) -> bool:
     return bool(row and row.get("refresh_token"))
 
 
-def disconnect(engine: sa.Engine) -> None:
+def disconnect(engine: sa.Engine, email: str | None = None) -> None:
     with engine.begin() as conn:
-        conn.execute(google_tokens_t.delete().where(google_tokens_t.c.id == 1))
+        if email:
+            conn.execute(google_tokens_t.delete().where(google_tokens_t.c.email == email))
+        else:
+            conn.execute(google_tokens_t.delete())

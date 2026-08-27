@@ -18,14 +18,20 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from db import (
+    drop_course,
     fetch_assignments,
     fetch_courses,
+    fetch_dropped_courses,
+    fetch_drop_log,
     fetch_last_sync,
     fetch_resource_links,
     make_engine,
+    restore_course,
     set_assignment_status,
 )
+import db as db_module
 import auth
+import gemini
 import google_client
 import google_routes
 
@@ -66,6 +72,7 @@ def _startup() -> None:
     # Ensure owned tables exist before any request touches them.
     google_client.ensure_schema(engine)
     auth.ensure_schema(engine)
+    db_module.ensure_schema(engine)
 
 
 @app.get("/api/health")
@@ -158,6 +165,57 @@ def resources() -> list[dict]:
         return fetch_resource_links(engine)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"resources query failed: {exc}") from exc
+
+
+@app.get("/api/courses/dropped")
+def dropped_courses() -> dict:
+    try:
+        return {
+            "dropped": fetch_dropped_courses(engine),
+            "log": fetch_drop_log(engine),
+        }
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"dropped courses failed: {exc}") from exc
+
+
+@app.post("/api/courses/{course_id}/drop")
+def drop(course_id: int) -> dict:
+    try:
+        name = drop_course(engine, course_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"id": str(course_id), "name": name, "dropped": True}
+
+
+@app.post("/api/courses/{course_id}/restore")
+def restore(course_id: int) -> dict:
+    try:
+        name = restore_course(engine, course_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"id": str(course_id), "name": name, "dropped": False}
+
+
+@app.get("/api/chat/config")
+def chat_config() -> dict:
+    return {"configured": bool((os.environ.get("GEMINI_API_KEY") or "").strip())}
+
+
+@app.post("/api/chat")
+def chat(body: dict):
+    message = (body or {}).get("message", "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required")
+    history = (body or {}).get("history") or []
+    try:
+        courses = fetch_courses(engine)
+        assignments = fetch_assignments(engine)
+        reply = gemini.chat(engine, courses, assignments, message, history)
+    except gemini.GeminiNotConfigured as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Gemini call failed: {exc}") from exc
+    return {"reply": reply}
 
 
 @app.get("/api")

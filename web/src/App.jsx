@@ -81,7 +81,7 @@ export default function App() {
 }
 
 function Dashboard({ onLogout }) {
-  const { courses, assignments, stats, filtered, loading, error, updateStatus } = useDashboardData()
+  const { courses, assignments, stats, filtered, loading, error, updateStatus, reload } = useDashboardData()
   const [active, setActive] = useState('overview')
   const [filterKey, setFilterKey] = useState(null)
   const google = useGoogleStatus()
@@ -241,7 +241,9 @@ function Dashboard({ onLogout }) {
 
           {active === 'resources' && <ResourcesView />}
 
-          {active === 'settings' && <SettingsView onLogout={onLogout} />}
+          {active === 'settings' && (
+            <SettingsView onLogout={onLogout} courses={courses} onDataChanged={reload} />
+          )}
         </main>
       </div>
     </div>

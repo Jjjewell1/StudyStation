@@ -49,16 +49,23 @@ def callback(request: Request, code: str, state: str | None = None, error: str |
 def status(request: Request):
     try:
         connected = g.is_connected(_engine(request))
-        email = g.get_email(_engine(request)) if connected else None
+        emails = g.connected_emails(_engine(request)) if connected else []
+        default = g.default_email(_engine(request))
     except g.GoogleNotConfigured:
-        return {"connected": False, "configured": False}
-    return {"connected": connected, "configured": True, "email": email}
+        return {"connected": False, "configured": False, "emails": []}
+    return {
+        "connected": connected,
+        "configured": True,
+        "email": default,
+        "emails": emails,
+    }
 
 
 @router.post("/disconnect")
-def disconnect(request: Request):
-    g.disconnect(_engine(request))
-    return {"connected": False}
+def disconnect(request: Request, body: dict | None = None):
+    email = (body or {}).get("email")
+    g.disconnect(_engine(request), email)
+    return {"connected": g.is_connected(_engine(request))}
 
 
 # ---------- Calendar ----------

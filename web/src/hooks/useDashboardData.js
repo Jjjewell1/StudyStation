@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { getCourses, getAssignments } from '@/api/client'
 import { isPast, isToday, isWithinDays } from '@/lib/dates'
 
@@ -10,24 +10,23 @@ export function useDashboardData() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const [c, a] = await Promise.all([getCourses(), getAssignments()])
-        if (cancelled) return
-        setCourses(c)
-        setAssignments(a)
-      } catch (e) {
-        if (!cancelled) setError(e.message)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [c, a] = await Promise.all([getCourses(), getAssignments()])
+      setCourses(c)
+      setAssignments(a)
+      setError(null)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
 
   const incomplete = assignments.filter((a) => a.status !== 'submitted')
   const overdue = incomplete.filter((a) => isPast(a.dueAt))
@@ -52,6 +51,7 @@ export function useDashboardData() {
     },
     filtered: { overdue, dueToday, dueThisWeek, completed },
     updateStatus,
+    reload: load,
     loading,
     error,
   }

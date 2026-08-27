@@ -23,6 +23,16 @@ courses_t = sa.Table(
     sa.Column("course_code", sa.Text),
     sa.Column("term_name", sa.Text),
     sa.Column("is_active", sa.Boolean),
+    sa.Column("user_dropped", sa.Boolean),
+)
+
+course_drops_t = sa.Table(
+    "course_drops", metadata,
+    sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
+    sa.Column("course_id", sa.BigInteger),
+    sa.Column("name", sa.Text),
+    sa.Column("dropped_at", sa.DateTime(timezone=True)),
+    sa.Column("restored_at", sa.DateTime(timezone=True)),
 )
 
 assignments_t = sa.Table(
@@ -68,6 +78,27 @@ def make_engine(database_url: str) -> sa.Engine:
     if database_url.startswith("postgresql://"):
         database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
     return sa.create_engine(database_url, pool_pre_ping=True)
+
+
+def ensure_schema(engine: sa.Engine) -> None:
+    """Create dashboard-owned tables/columns (idempotent).
+
+    The sync job owns the core schema; this only adds the pieces the dashboard
+    owns: courses.user_dropped (manual hide) and the course_drops audit log."""
+    with engine.begin() as conn:
+        conn.execute(sa.text(
+            "ALTER TABLE courses ADD COLUMN IF NOT EXISTS user_dropped "
+            "BOOLEAN NOT NULL DEFAULT FALSE"
+        ))
+        conn.execute(sa.text(
+            "CREATE TABLE IF NOT EXISTS course_drops ("
+            "  id BIGSERIAL PRIMARY KEY,"
+            "  course_id BIGINT NOT NULL,"
+            "  name TEXT NOT NULL,"
+            "  dropped_at TIMESTAMPTZ NOT NULL DEFAULT now(),"
+            "  restored_at TIMESTAMPTZ"
+            ")"
+        ))
 
 
 def _iso(dt) -> str | None:
@@ -146,6 +177,7 @@ def fetch_courses(engine: sa.Engine) -> list[dict]:
         )
         .where(
             courses_t.c.is_active.is_(True),
+            sa.func.coalesce(courses_t.c.user_dropped, False).is_(False),
             # Resource-hub courses (e.g. SWCC Resources) aren't real classes;
             # their links surface via /api/resources instead.
             ~courses_t.c.name.ilike("%resource%"),
@@ -217,7 +249,10 @@ def fetch_assignments(engine: sa.Engine) -> list[dict]:
                 assignment_status_t.c.assignment_id == assignments_t.c.id,
             )
         )
-        .where(courses_t.c.is_active.is_(True))
+        .where(
+            courses_t.c.is_active.is_(True),
+            sa.func.coalesce(courses_t.c.user_dropped, False).is_(False),
+        )
         .order_by(assignments_t.c.due_at.asc().nulls_last(), assignments_t.c.name)
     )
 
@@ -261,6 +296,98 @@ def set_assignment_status(engine: sa.Engine, assignment_id: int, status: str) ->
             )
         )
     return status
+
+
+def drop_course(engine: sa.Engine, course_id: int) -> str:
+    """Manually hide a course (user_dropped=True) and append a log entry."""
+    with engine.begin() as conn:
+        row = conn.execute(
+            sa.select(courses_t.c.name).where(courses_t.c.id == course_id)
+        ).first()
+        if not row:
+            raise ValueError(f"course {course_id} not found")
+        name = row[0]
+        conn.execute(
+            sa.update(courses_t)
+            .where(courses_t.c.id == course_id)
+            .values(user_dropped=True)
+        )
+        conn.execute(course_drops_t.insert().values(
+            course_id=course_id, name=name, dropped_at=sa.func.now(),
+        ))
+    return name
+
+
+def restore_course(engine: sa.Engine, course_id: int) -> str:
+    """Re-show a manually dropped course and stamp the log entry restored."""
+    with engine.begin() as conn:
+        row = conn.execute(
+            sa.select(courses_t.c.name).where(courses_t.c.id == course_id)
+        ).first()
+        if not row:
+            raise ValueError(f"course {course_id} not found")
+        name = row[0]
+        conn.execute(
+            sa.update(courses_t)
+            .where(courses_t.c.id == course_id)
+            .values(user_dropped=False)
+        )
+        # Mark the most recent open drop entry as restored.
+        conn.execute(
+            sa.update(course_drops_t)
+            .where(course_drops_t.c.course_id == course_id, course_drops_t.c.restored_at.is_(None))
+            .values(restored_at=sa.func.now())
+        )
+    return name
+
+
+def fetch_drop_log(engine: sa.Engine) -> list[dict]:
+    stmt = (
+        sa.select(
+            course_drops_t.c.course_id,
+            course_drops_t.c.name,
+            course_drops_t.c.dropped_at,
+            course_drops_t.c.restored_at,
+        )
+        .order_by(course_drops_t.c.dropped_at.desc())
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(stmt).mappings().all()
+    return [
+        {
+            "courseId": str(r["course_id"]),
+            "name": r["name"],
+            "droppedAt": _iso(r["dropped_at"]),
+            "restoredAt": _iso(r["restored_at"]),
+            "dropped": r["restored_at"] is None,
+        }
+        for r in rows
+    ]
+
+
+def fetch_dropped_courses(engine: sa.Engine) -> list[dict]:
+    """Courses the user manually hid, with a short label for the settings UI."""
+    stmt = (
+        sa.select(
+            courses_t.c.id,
+            courses_t.c.name,
+            courses_t.c.course_code,
+            courses_t.c.term_name,
+        )
+        .where(sa.func.coalesce(courses_t.c.user_dropped, False).is_(True))
+        .order_by(courses_t.c.name)
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(stmt).mappings().all()
+    return [
+        {
+            "id": str(r["id"]),
+            "name": r["name"],
+            "short": _short_label(r["course_code"], r["name"]),
+            "term": r["term_name"] or "",
+        }
+        for r in rows
+    ]
 
 
 def fetch_last_sync(engine: sa.Engine) -> dict | None:

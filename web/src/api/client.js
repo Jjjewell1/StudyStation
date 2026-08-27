@@ -67,6 +67,15 @@ export const logout = () => sendJSON('/auth/logout', 'POST')
 export const getSyncStatus = () => getJSON('/sync/status')
 export const triggerSync = () => sendJSON('/sync', 'POST')
 
+// Courses: drop / restore
+export const dropCourse = (id) => sendJSON(`/courses/${id}/drop`, 'POST')
+export const restoreCourse = (id) => sendJSON(`/courses/${id}/restore`, 'POST')
+export const getDroppedCourses = () => getJSON('/courses/dropped')
+
+// AI assistant (Gemini)
+export const getChatConfig = () => getJSON('/chat/config')
+export const sendChat = (message, history) => sendJSON('/chat', 'POST', { message, history })
+
 export const getCourses = () => getJSON('/courses')
 export const getAssignments = () => getJSON('/assignments')
 export const getResources = () => getJSON('/resources')
