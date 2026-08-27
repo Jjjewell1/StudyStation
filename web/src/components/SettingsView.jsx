@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import GoogleConnect, { useGoogleStatus } from './GoogleConnect'
 import { Icon } from './Icon'
+import { getSyncStatus, triggerSync } from '@/api/client'
 
 const TABS = [
+  { id: 'sync', label: 'Sync', icon: 'calendarCheck' },
   { id: 'google', label: 'Google', icon: 'contacts' },
   { id: 'account', label: 'Account', icon: 'tasks' },
 ]
@@ -92,8 +94,36 @@ function GoogleGuide() {
 }
 
 export default function SettingsView({ onLogout }) {
-  const [tab, setTab] = useState('google')
+  const [tab, setTab] = useState('sync')
   const google = useGoogleStatus()
+  const [syncInfo, setSyncInfo] = useState(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState(null)
+
+  function refreshSyncStatus() {
+    getSyncStatus()
+      .then((s) => setSyncInfo(s.last))
+      .catch(() => {})
+  }
+
+  useEffect(() => {
+    refreshSyncStatus()
+  }, [])
+
+  async function syncNow() {
+    if (syncing) return
+    setSyncing(true)
+    setSyncResult(null)
+    try {
+      const res = await triggerSync()
+      setSyncResult(res)
+    } catch (e) {
+      setSyncResult({ error: e.message })
+    } finally {
+      setSyncing(false)
+      refreshSyncStatus()
+    }
+  }
 
   return (
     <section className="glass rounded-3xl p-5">
@@ -115,6 +145,83 @@ export default function SettingsView({ onLogout }) {
           </button>
         ))}
       </div>
+
+      {tab === 'sync' && (
+        <div className="space-y-5">
+          <div className="glass-subtle flex flex-col gap-4 rounded-2xl p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-sm font-semibold text-white">Canvas sync</div>
+              <div className="mt-0.5 text-xs text-white/50">
+                Pulls the latest courses, assignments, and due dates from Canvas.
+              </div>
+            </div>
+            <button
+              onClick={syncNow}
+              disabled={syncing}
+              className="flex shrink-0 items-center gap-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-400 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
+            >
+              <Icon name="calendarCheck" className="h-4 w-4" />
+              {syncing ? 'Syncing…' : 'Sync now'}
+            </button>
+          </div>
+
+          {syncResult && (
+            <div className="glass-subtle rounded-2xl p-4 text-sm">
+              {syncResult.error ? (
+                <p className="text-red-300">Sync failed: {syncResult.error}</p>
+              ) : syncResult.exit_code === 0 ? (
+                <p className="text-emerald-300">Sync completed successfully.</p>
+              ) : (
+                <p className="text-amber-300">
+                  Sync exited with code {syncResult.exit_code}.{' '}
+                  {syncResult.exit_code === 2
+                    ? 'Canvas session expired — re-capture it (see below).'
+                    : 'Check the logs for details.'}
+                </p>
+              )}
+              {syncResult.stdout && (
+                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-white/50">
+                  {syncResult.stdout}
+                </pre>
+              )}
+            </div>
+          )}
+
+          <div className="glass-subtle rounded-2xl p-4">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/40">
+              Last sync
+            </div>
+            {syncInfo ? (
+              <div className="text-sm text-white/70">
+                <span className="font-semibold text-white">
+                  {syncInfo.status === 'success' ? 'Success' : syncInfo.status}
+                </span>
+                {syncInfo.finishedAt && (
+                  <span className="text-white/45">
+                    {' '}
+                    · {new Date(syncInfo.finishedAt).toLocaleString()}
+                  </span>
+                )}
+                {syncInfo.counts && (
+                  <span className="text-white/45">
+                    {' '}
+                    · {syncInfo.counts.courses} courses, {syncInfo.counts.assignments} assignments
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="text-sm text-white/45">No sync has run yet.</div>
+            )}
+          </div>
+
+          <p className="text-xs text-white/40">
+            Note: the sync normally runs nightly (and on every redeploy). If your Canvas
+            session has expired, a manual sync will fail until you re-capture it by running{' '}
+            <code>capture_session.py</code> locally and updating{' '}
+            <code>CANVAS_SESSION_JSON</code>.
+          </p>
+        </div>
+      )}
 
       {tab === 'google' && (
         <div className="space-y-6">

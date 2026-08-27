@@ -63,6 +63,10 @@ export const login = (pin) => sendJSON('/auth/login', 'POST', { pin })
 export const getAuthStatus = () => getJSON('/auth/status')
 export const logout = () => sendJSON('/auth/logout', 'POST')
 
+// Sync
+export const getSyncStatus = () => getJSON('/sync/status')
+export const triggerSync = () => sendJSON('/sync', 'POST')
+
 export const getCourses = () => getJSON('/courses')
 export const getAssignments = () => getJSON('/assignments')
 export const getResources = () => getJSON('/resources')

@@ -53,6 +53,16 @@ resource_links_t = sa.Table(
     sa.Column("sort_order", sa.Integer),
 )
 
+sync_runs_t = sa.Table(
+    "sync_runs", metadata,
+    sa.Column("id", sa.BigInteger),
+    sa.Column("started_at", sa.DateTime(timezone=True)),
+    sa.Column("finished_at", sa.DateTime(timezone=True)),
+    sa.Column("status", sa.Text),
+    sa.Column("detail", sa.Text),
+    sa.Column("counts", sa.JSON),
+)
+
 
 def make_engine(database_url: str) -> sa.Engine:
     if database_url.startswith("postgresql://"):
@@ -245,3 +255,28 @@ def set_assignment_status(engine: sa.Engine, assignment_id: int, status: str) ->
             )
         )
     return status
+
+
+def fetch_last_sync(engine: sa.Engine) -> dict | None:
+    stmt = (
+        sa.select(
+            sync_runs_t.c.started_at,
+            sync_runs_t.c.finished_at,
+            sync_runs_t.c.status,
+            sync_runs_t.c.detail,
+            sync_runs_t.c.counts,
+        )
+        .order_by(sync_runs_t.c.id.desc())
+        .limit(1)
+    )
+    with engine.connect() as conn:
+        row = conn.execute(stmt).mappings().first()
+    if not row:
+        return None
+    return {
+        "startedAt": _iso(row["started_at"]),
+        "finishedAt": _iso(row["finished_at"]),
+        "status": row["status"],
+        "detail": row["detail"],
+        "counts": row["counts"],
+    }

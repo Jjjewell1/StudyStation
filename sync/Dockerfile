@@ -16,6 +16,7 @@ RUN ARCH="$(dpkg --print-architecture)" && \
     chmod +x /usr/local/bin/supercronic
 
 COPY sync/entrypoint.sh /app/entrypoint.sh
+COPY sync/trigger_server.py /app/trigger_server.py
 COPY sync/schema.sql /app/schema.sql
 COPY sync/config.py /app/config.py
 COPY sync/db.py /app/db.py

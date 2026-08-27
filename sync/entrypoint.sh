@@ -25,4 +25,7 @@ fi
 
 echo "$SCHED python -u /app/main.py" > /app/crontab
 echo "[entrypoint] cron mode, schedule: $SCHED (UTC)"
+# On-demand trigger server: lets the dashboard fire a manual sync via
+# POST /sync without waiting for the nightly slot.
+python -u /app/trigger_server.py 8000 &
 exec supercronic -passthrough-logs /app/crontab

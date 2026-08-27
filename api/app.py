@@ -12,6 +12,7 @@ Routes (all served under /api by nginx):
 from __future__ import annotations
 
 import os
+import urllib.request
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -19,6 +20,7 @@ from fastapi.responses import JSONResponse
 from db import (
     fetch_assignments,
     fetch_courses,
+    fetch_last_sync,
     fetch_resource_links,
     make_engine,
     set_assignment_status,
@@ -97,6 +99,29 @@ def logout(request: Request) -> dict:
     if token:
         auth.revoke(engine, token)
     return {"authenticated": False}
+
+
+@app.get("/api/sync/status")
+def sync_status() -> dict:
+    last = fetch_last_sync(engine)
+    return {"last": last, "triggerAvailable": True}
+
+
+@app.post("/api/sync")
+def sync_now() -> dict:
+    """Fire an on-demand Canvas sync via the sync container's trigger server."""
+    url = os.environ.get("SYNC_TRIGGER_URL", "http://sync:8000/sync")
+    try:
+        req = urllib.request.Request(url, method="POST")
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"sync trigger failed: {exc}") from exc
+    try:
+        import json
+        return json.loads(body)
+    except Exception:  # noqa: BLE001
+        return {"started": True, "raw": body[:1000]}
 
 
 @app.get("/api/courses")
