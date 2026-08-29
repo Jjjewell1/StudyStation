@@ -82,6 +82,36 @@ export const getResources = () => getJSON('/resources')
 export const setAssignmentStatus = (id, status) =>
   sendJSON(`/assignments/${id}/status`, 'PATCH', { status })
 
+// Class documents (upload + AI Q&A)
+export const uploadCourseDocuments = (courseId, files) => {
+  const form = new FormData()
+  for (const f of files) form.append('files', f)
+  const headers = { Accept: 'application/json' }
+  if (authToken) headers.Authorization = `Bearer ${authToken}`
+  return fetch(`${BASE}/courses/${courseId}/documents`, {
+    method: 'POST',
+    headers,
+    body: form,
+  }).then(async (res) => {
+    if (!res.ok) {
+      let detail = `${res.status}`
+      try {
+        const data = await res.json().catch(() => null)
+        if (data?.detail) detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
+      } catch { /* ignore */ }
+      throw new Error(detail)
+    }
+    return res.json()
+  })
+}
+export const getCourseDocuments = (courseId) => getJSON(`/courses/${courseId}/documents`)
+export const deleteCourseDocument = (courseId, docId) =>
+  sendJSON(`/courses/${courseId}/documents/${docId}`, 'DELETE')
+export const askCourseDocuments = (courseId, message, history) =>
+  sendJSON(`/courses/${courseId}/documents/ask`, 'POST', { message, history })
+export const courseDocumentUrl = (courseId, docId) =>
+  `${BASE}/courses/${courseId}/documents/${docId}/download`
+
 // Google
 export const getGoogleStatus = () => getJSON('/google/status')
 export const googleAuthUrl = () => `${BASE}/google/auth`

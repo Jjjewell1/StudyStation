@@ -6,6 +6,7 @@ const NAV = [
   { id: 'overview', label: 'Overview', icon: 'overview' },
   { id: 'assignments', label: 'Assignments', icon: 'assignments' },
   { id: 'courses', label: 'Courses', icon: 'courses' },
+  { id: 'documents', label: 'Documents', icon: 'book' },
   { id: 'calendar', label: 'Calendar', icon: 'calendar' },
   { id: 'mail', label: 'Mail', icon: 'mail' },
   { id: 'tasks', label: 'Tasks', icon: 'tasks' },

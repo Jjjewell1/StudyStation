@@ -73,6 +73,26 @@ sync_runs_t = sa.Table(
     sa.Column("counts", sa.JSON),
 )
 
+documents_t = sa.Table(
+    "documents", metadata,
+    sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
+    sa.Column("course_id", sa.BigInteger),
+    sa.Column("filename", sa.Text),
+    sa.Column("mime", sa.Text),
+    sa.Column("size_bytes", sa.BigInteger),
+    sa.Column("data", sa.LargeBinary),
+    sa.Column("created_at", sa.DateTime(timezone=True)),
+)
+
+document_chunks_t = sa.Table(
+    "document_chunks", metadata,
+    sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
+    sa.Column("document_id", sa.BigInteger),
+    sa.Column("course_id", sa.BigInteger),
+    sa.Column("chunk_index", sa.Integer),
+    sa.Column("content", sa.Text),
+)
+
 
 def make_engine(database_url: str) -> sa.Engine:
     if database_url.startswith("postgresql://"):
@@ -98,6 +118,39 @@ def ensure_schema(engine: sa.Engine) -> None:
             "  dropped_at TIMESTAMPTZ NOT NULL DEFAULT now(),"
             "  restored_at TIMESTAMPTZ"
             ")"
+        ))
+        # User-uploaded class documents (raw file bytes) + text chunks for AI
+        # Q&A. Chunks carry a generated tsvector column so retrieval can use
+        # Postgres full-text ranking instead of an embedding service.
+        conn.execute(sa.text(
+            "CREATE TABLE IF NOT EXISTS documents ("
+            "  id BIGSERIAL PRIMARY KEY,"
+            "  course_id BIGINT NOT NULL,"
+            "  filename TEXT NOT NULL,"
+            "  mime TEXT,"
+            "  size_bytes BIGINT NOT NULL,"
+            "  data BYTEA NOT NULL,"
+            "  created_at TIMESTAMPTZ NOT NULL DEFAULT now()"
+            ")"
+        ))
+        conn.execute(sa.text(
+            "CREATE INDEX IF NOT EXISTS idx_documents_course ON documents(course_id)"
+        ))
+        conn.execute(sa.text(
+            "CREATE TABLE IF NOT EXISTS document_chunks ("
+            "  id BIGSERIAL PRIMARY KEY,"
+            "  document_id BIGINT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,"
+            "  course_id BIGINT NOT NULL,"
+            "  chunk_index INT NOT NULL,"
+            "  content TEXT NOT NULL,"
+            "  tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', content)) STORED"
+            ")"
+        ))
+        conn.execute(sa.text(
+            "CREATE INDEX IF NOT EXISTS idx_chunks_course ON document_chunks(course_id)"
+        ))
+        conn.execute(sa.text(
+            "CREATE INDEX IF NOT EXISTS idx_chunks_tsv ON document_chunks USING GIN (tsv)"
         ))
 
 
@@ -413,3 +466,165 @@ def fetch_last_sync(engine: sa.Engine) -> dict | None:
         "detail": row["detail"],
         "counts": row["counts"],
     }
+
+
+# --- Class document uploads ---------------------------------------------
+
+
+def course_exists(engine: sa.Engine, course_id: int) -> bool:
+    stmt = sa.select(sa.literal(1)).where(courses_t.c.id == course_id).limit(1)
+    with engine.connect() as conn:
+        return conn.execute(stmt).first() is not None
+
+
+def course_name(engine: sa.Engine, course_id: int) -> str | None:
+    stmt = sa.select(courses_t.c.name).where(courses_t.c.id == course_id)
+    with engine.connect() as conn:
+        row = conn.execute(stmt).first()
+    return row[0] if row else None
+
+
+def insert_document(engine: sa.Engine, course_id: int, filename: str,
+                    mime: str, data: bytes, text_chunks: list[str]) -> int:
+    """Store a document and its parsed text chunks; returns the document id."""
+    with engine.begin() as conn:
+        doc_id = conn.execute(
+            sa.text(
+                "INSERT INTO documents (course_id, filename, mime, size_bytes, data) "
+                "VALUES (:course_id, :filename, :mime, :size_bytes, :data) "
+                "RETURNING id"
+            ),
+            {
+                "course_id": course_id,
+                "filename": filename,
+                "mime": mime,
+                "size_bytes": len(data),
+                "data": data,
+            },
+        ).scalar()
+        if text_chunks:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO document_chunks (document_id, course_id, chunk_index, content) "
+                    "VALUES (:document_id, :course_id, :chunk_index, :content)"
+                ),
+                [
+                    {"document_id": doc_id, "course_id": course_id,
+                     "chunk_index": i, "content": chunk}
+                    for i, chunk in enumerate(text_chunks)
+                ],
+            )
+    return doc_id
+
+
+def get_document(engine: sa.Engine, course_id: int, document_id: int) -> dict | None:
+    stmt = (
+        sa.select(
+            documents_t.c.id,
+            documents_t.c.filename,
+            documents_t.c.mime,
+            documents_t.c.size_bytes,
+            documents_t.c.data,
+            documents_t.c.created_at,
+        )
+        .where(
+            documents_t.c.id == document_id,
+            documents_t.c.course_id == course_id,
+        )
+    )
+    with engine.connect() as conn:
+        row = conn.execute(stmt).mappings().first()
+    if not row:
+        return None
+    return {
+        "id": int(row["id"]),
+        "filename": row["filename"],
+        "mime": row["mime"],
+        "sizeBytes": int(row["size_bytes"] or 0),
+        "data": bytes(row["data"] or b""),
+        "createdAt": _iso(row["created_at"]),
+    }
+
+
+def list_documents(engine: sa.Engine, course_id: int) -> list[dict]:
+    stmt = sa.text(
+        "SELECT d.id, d.filename, d.mime, d.size_bytes, d.created_at, "
+        "       count(c.id) AS chunk_count "
+        "FROM documents d "
+        "LEFT JOIN document_chunks c ON c.document_id = d.id "
+        "WHERE d.course_id = :course_id "
+        "GROUP BY d.id "
+        "ORDER BY d.created_at DESC, d.id DESC"
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(stmt, {"course_id": course_id}).mappings().all()
+    return [
+        {
+            "id": str(r["id"]),
+            "filename": r["filename"],
+            "mime": r["mime"],
+            "sizeBytes": int(r["size_bytes"] or 0),
+            "chunkCount": int(r["chunk_count"] or 0),
+            "createdAt": _iso(r["created_at"]),
+        }
+        for r in rows
+    ]
+
+
+def delete_document(engine: sa.Engine, course_id: int, document_id: int) -> str | None:
+    """Delete a document (chunks cascade); returns its filename or None."""
+    with engine.begin() as conn:
+        row = conn.execute(
+            sa.text(
+                "DELETE FROM documents WHERE id = :id AND course_id = :course_id "
+                "RETURNING filename"
+            ),
+            {"id": document_id, "course_id": course_id},
+        ).first()
+    return row[0] if row else None
+
+
+def ranked_document_chunks(engine: sa.Engine, course_id: int, query: str,
+                           limit: int = 12) -> list[dict]:
+    """Chunks matching *query* (Postgres full-text) ordered by relevance."""
+    stmt = sa.text(
+        "SELECT c.content, d.filename, d.id AS document_id, "
+        "       ts_rank(c.tsv, plainto_tsquery('english', :query)) AS rank "
+        "FROM document_chunks c "
+        "JOIN documents d ON d.id = c.document_id "
+        "WHERE c.course_id = :course_id "
+        "  AND c.tsv @@ plainto_tsquery('english', :query) "
+        "ORDER BY rank DESC, d.id, c.id "
+        "LIMIT :limit"
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(
+            stmt, {"course_id": course_id, "query": query, "limit": limit}
+        ).mappings().all()
+    return [
+        {"documentId": r["document_id"], "filename": r["filename"], "content": r["content"]}
+        for r in rows
+        if r["content"] and r["content"].strip()
+    ]
+
+
+def ordered_document_chunks(engine: sa.Engine, course_id: int,
+                            limit: int = 12) -> list[dict]:
+    """Chunks in document/reading order (fallback when FTS finds nothing)."""
+    stmt = sa.text(
+        "SELECT c.content, d.filename, d.id AS document_id "
+        "FROM document_chunks c "
+        "JOIN documents d ON d.id = c.document_id "
+        "WHERE c.course_id = :course_id "
+        "ORDER BY d.id, c.chunk_index "
+        "LIMIT :limit"
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(
+            stmt, {"course_id": course_id, "limit": limit}
+        ).mappings().all()
+    return [
+        {"documentId": r["document_id"], "filename": r["filename"], "content": r["content"]}
+        for r in rows
+        if r["content"] and r["content"].strip()
+    ]

@@ -4,6 +4,7 @@ import Header from './components/Header'
 import StatCard from './components/StatCard'
 import AssignmentsPanel from './components/AssignmentsPanel'
 import CoursesView from './components/CoursesView'
+import DocumentsView from './components/DocumentsView'
 import CalendarView from './components/CalendarView'
 import ResourcesView from './components/ResourcesView'
 import MailView from './components/MailView'
@@ -230,6 +231,8 @@ function Dashboard({ onLogout }) {
           {active === 'courses' && (
             <CoursesView courses={courses} loading={loading} error={error} />
           )}
+
+          {active === 'documents' && <DocumentsView courses={courses} />}
 
           {active === 'calendar' && <CalendarView assignments={assignments} />}
 

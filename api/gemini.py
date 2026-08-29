@@ -65,10 +65,6 @@ def _build_context(courses: list[dict], assignments: list[dict]) -> str:
 def chat(engine, courses: list[dict], assignments: list[dict],
          message: str, history: list[dict] | None = None) -> str:
     """One-turn chat against Gemini with a coursework context snapshot."""
-    key = _api_key()
-    model = _model()
-    url = f"{API}/{model}:generateContent?key={key}"
-
     system = (
         "You are the StudyStation assistant, a friendly homework/coursework "
         "helper for a college student. Answer concisely using the student's real "
@@ -76,6 +72,32 @@ def chat(engine, courses: list[dict], assignments: list[dict],
         "text (no markdown tables unless asked).\n\n"
         f"{_build_context(courses, assignments)}"
     )
+    return _generate(system, message, history)
+
+
+def chat_on_source(source_label: str, source_text: str,
+                   message: str, history: list[dict] | None = None) -> str:
+    """Answer *message* using ONLY the provided document material.
+
+    source_label names the material set (e.g. the course name) and source_text
+    is the extracted/ranked text handed to the model."""
+    system = (
+        "You are the StudyStation assistant, a study helper for a college "
+        "student. The student uploaded course material and asks questions about "
+        "it. Answer using ONLY the material provided below. If the answer is "
+        "not in the material, say so plainly instead of guessing. Quote the "
+        "material where it helps. Prefer clear, direct answers.\n\n"
+        f"Course material: {source_label}\n\n"
+        f"{source_text}"
+    )
+    return _generate(system, message, history)
+
+
+def _generate(system: str, message: str, history: list[dict] | None = None) -> str:
+    """POST a single generateContent turn. Shared by chat() and chat_on_source()."""
+    key = _api_key()
+    model = _model()
+    url = f"{API}/{model}:generateContent?key={key}"
 
     contents = []
     for h in (history or [])[-10:]:
@@ -86,7 +108,7 @@ def chat(engine, courses: list[dict], assignments: list[dict],
     payload = {
         "systemInstruction": {"parts": [{"text": system}]},
         "contents": contents,
-        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 800},
+        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 1200},
     }
 
     req = urllib.request.Request(

@@ -14,6 +14,8 @@ COPY api/auth.py /app/auth.py
 COPY api/gemini.py /app/gemini.py
 COPY api/google_client.py /app/google_client.py
 COPY api/google_routes.py /app/google_routes.py
+COPY api/doc_parser.py /app/doc_parser.py
+COPY api/docs_routes.py /app/docs_routes.py
 RUN python -m compileall -q /app
 
 EXPOSE 8000

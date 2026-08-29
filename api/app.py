@@ -34,6 +34,7 @@ import auth
 import gemini
 import google_client
 import google_routes
+import docs_routes
 
 DATABASE_URL = (os.environ.get("DATABASE_URL") or "").strip()
 if not DATABASE_URL:
@@ -44,6 +45,7 @@ engine = make_engine(DATABASE_URL)
 app = FastAPI(title="StudyStation API", version="0.1.0")
 app.state.engine = engine
 app.include_router(google_routes.router)
+app.include_router(docs_routes.router)
 
 # Paths that bypass PIN auth (login itself, health, and the Google OAuth
 # callback which is hit by an external browser redirect without our header).
