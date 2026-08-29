@@ -14,7 +14,7 @@ import urllib.request
 API = "https://generativelanguage.googleapis.com/v1beta/models"
 
 # Flash is fast and cheap; enough for a coursework Q&A assistant.
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-3.6-flash"
 
 
 class GeminiNotConfigured(RuntimeError):
