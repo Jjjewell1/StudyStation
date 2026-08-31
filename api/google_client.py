@@ -88,15 +88,30 @@ def redirect_uri() -> str:
 def ensure_schema(engine: sa.Engine) -> None:
     """Create the google_tokens + google_state tables if missing (idempotent)."""
     with engine.begin() as conn:
-        conn.execute(sa.text(
-            "CREATE TABLE IF NOT EXISTS google_tokens ("
-            "  email TEXT PRIMARY KEY,"
-            "  refresh_token TEXT,"
-            "  access_token TEXT,"
-            "  token_expiry TIMESTAMPTZ,"
-            "  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()"
-            ")"
-        ))
+        # google_tokens from an early deploy was created in a different shape
+        # (no unique key on email), which breaks the ON CONFLICT (email) upsert.
+        # Safe to rebuild: the table only holds rows after a connect succeeds,
+        # so a legacy bare table is always empty here.
+        has_email_pk = conn.execute(sa.text(
+            "SELECT 1 FROM information_schema.table_constraints tc "
+            "WHERE tc.table_name = 'google_tokens' "
+            "AND tc.constraint_type = 'PRIMARY KEY' "
+            "AND EXISTS (SELECT 1 FROM information_schema.key_column_usage kcu "
+            "            WHERE kcu.constraint_name = tc.constraint_name "
+            "            AND kcu.table_schema = tc.table_schema "
+            "            AND kcu.column_name = 'email')"
+        )).first()
+        if not has_email_pk:
+            conn.execute(sa.text("DROP TABLE IF EXISTS google_tokens"))
+            conn.execute(sa.text(
+                "CREATE TABLE google_tokens ("
+                "  email TEXT PRIMARY KEY,"
+                "  refresh_token TEXT,"
+                "  access_token TEXT,"
+                "  token_expiry TIMESTAMPTZ,"
+                "  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()"
+                ")"
+            ))
         # google_state started as a single row (id INTEGER PK DEFAULT 1); the
         # OAuth `state` from parallel/retried connect flows clobbered each
         # other, causing CSRF-looking mismatches on callback. It's now a
