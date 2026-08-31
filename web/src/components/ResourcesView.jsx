@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getResources } from '@/api/client'
+import EmptyState from './EmptyState'
 import { Icon } from './Icon'
 
 export default function ResourcesView() {
@@ -25,7 +26,7 @@ export default function ResourcesView() {
   }, [])
 
   return (
-    <section className="glass rounded-3xl p-5">
+    <section className="glass animate-rise rounded-3xl p-5">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-bold">Resources</h2>
         <span className="text-xs text-white/45">
@@ -34,18 +35,25 @@ export default function ResourcesView() {
       </div>
 
       {loading && (
-        <div className="flex flex-1 items-center justify-center py-16 text-sm text-white/40">
-          Loading…
+        <div className="grid grid-cols-1 gap-3 py-2 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-4">
+              <div className="skeleton h-9 w-9 shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <div className="skeleton h-3.5 w-3/4" />
+                <div className="skeleton h-2.5 w-1/2" />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
       {!loading && !error && groups.length === 0 && (
-        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-          <Icon name="resources" className="h-8 w-8 text-white/25" />
-          <p className="text-sm text-white/45">
-            No resources yet — the Canvas sync will populate this.
-          </p>
-        </div>
+        <EmptyState
+          icon="resources"
+          title="No resources yet"
+          hint="The Canvas sync will populate this."
+        />
       )}
 
       {!loading &&

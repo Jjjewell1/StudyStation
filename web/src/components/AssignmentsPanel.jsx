@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import CourseTabs from './CourseTabs'
 import AssignmentRow from './AssignmentRow'
+import EmptyState from './EmptyState'
 import { Icon } from './Icon'
 import {
   hasDue,
@@ -11,9 +12,15 @@ import {
 
 const STATUS_ORDER = { not_started: 0, drafted: 1, submitted: 2 }
 
-export default function AssignmentsPanel({ courses, grouped, loading, error, filter, onClearFilter, onStatusChange }) {
+export default function AssignmentsPanel({ courses, grouped, loading, error, filter, search = '', onClearFilter, onStatusChange }) {
+  const q = (search ?? '').trim().toLowerCase()
+  const matches = (a, courseName) =>
+    !q ||
+    (a.name ?? '').toLowerCase().includes(q) ||
+    (courseName ?? '').toLowerCase().includes(q)
+
   const [selected, setSelected] = useState('all')
-  const [openWeek, setOpenWeek] = useState(null)
+  const [openWeek, setOpenWeek] = useState(() => weekKey(new Date().toISOString()))
 
   // Filter by course tab (or stat-card filter bucket, which pre-groups `grouped`).
   const visible = filter ? grouped : selected === 'all' ? grouped : grouped.filter((c) => c.id === selected)
@@ -32,6 +39,7 @@ export default function AssignmentsPanel({ courses, grouped, loading, error, fil
     }
     for (const course of visible) {
       for (const a of course.assignments) {
+        if (!matches(a, course.name)) continue
         if (!hasDue(a.dueAt)) {
           noDate.items.push({ ...a, courseName: course.name })
           noDate.total += 1
@@ -66,9 +74,9 @@ export default function AssignmentsPanel({ courses, grouped, loading, error, fil
     })
     if (noDate.total > 0) out.push({ ...noDate, finished: noDate.done === noDate.total })
     return out
-  }, [visible])
+  }, [visible, q])
 
-  const visibleCount = visible.reduce((n, c) => n + c.assignments.length, 0)
+  const matchedCount = weeks.reduce((n, w) => n + w.total, 0)
   const totalCount = grouped.reduce((n, c) => n + c.assignments.length, 0)
 
   function toggleWeek(key) {
@@ -76,7 +84,7 @@ export default function AssignmentsPanel({ courses, grouped, loading, error, fil
   }
 
   return (
-    <div className="glass flex flex-col rounded-3xl p-5">
+    <div className="glass animate-rise flex flex-col rounded-3xl p-5">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-bold">Assignments</h2>
@@ -88,41 +96,51 @@ export default function AssignmentsPanel({ courses, grouped, loading, error, fil
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-white/45">
-            {loading ? '…' : `${visibleCount}${!filter && selected === 'all' ? '' : ` / ${totalCount}`}`}
+            {loading ? '…' : `${matchedCount}${!filter && selected === 'all' && !q ? '' : ` / ${totalCount}`}`}
           </span>
-          {filter && (
+          {(filter || q) && (
             <button
               onClick={onClearFilter}
               className="flex items-center gap-1 rounded-full bg-white/5 px-2.5 py-1 text-xs text-white/55 transition-colors hover:bg-white/15 hover:text-white"
             >
-              <Icon name="collapse" className="h-3.5 w-3.5" /> Clear
+              <Icon name="x" className="h-3 w-3" /> Clear
             </button>
           )}
         </div>
       </div>
 
-      {!loading && !filter && <CourseTabs courses={courses} activeId={selected} onChange={setSelected} />}
+      {!loading && (!filter || Object.keys(grouped).length > 0) && (
+        <CourseTabs courses={courses} activeId={selected} onChange={setSelected} />
+      )}
 
       {loading && (
-        <div className="flex flex-1 items-center justify-center py-16 text-sm text-white/40">
-          Loading…
+        <div className="flex flex-col gap-2.5 py-4">
+          {[80, 100, 60, 90].map((w, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <div className="skeleton h-8 w-8" />
+              <div className="flex-1 space-y-1.5">
+                <div className="skeleton h-3.5" style={{ width: `${w}%` }} />
+                <div className="skeleton h-2.5" style={{ width: `${Math.max(30, w - 30)}%` }} />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
       {!loading && !error && grouped.length === 0 && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-center">
-          <Icon name="assignments" className="h-8 w-8 text-white/25" />
-          <p className="text-sm text-white/45">
-            No assignments yet — the Canvas sync will populate this.
-          </p>
-        </div>
+        <EmptyState
+          icon="assignments"
+          title="No assignments yet"
+          hint="The Canvas sync will populate this."
+        />
       )}
 
-      {!loading && !error && weeks.length === 0 && visibleCount === 0 && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-center">
-          <Icon name="sparkle" className="h-8 w-8 text-white/25" />
-          <p className="text-sm text-white/45">Nothing here — nice work.</p>
-        </div>
+      {!loading && !error && matchedCount === 0 && grouped.length > 0 && (
+        <EmptyState
+          icon={q ? 'x' : 'sparkle'}
+          title={q ? `No matches for “${q}”` : 'Nothing to show'}
+          hint={q ? 'Try a different course or assignment name.' : 'Nothing due right now — nice work.'}
+        />
       )}
 
       {!loading && (
@@ -134,6 +152,7 @@ export default function AssignmentsPanel({ courses, grouped, loading, error, fil
                 (STATUS_ORDER[a.status] ?? 0) - (STATUS_ORDER[b.status] ?? 0) ||
                 new Date(a.dueAt) - new Date(b.dueAt),
             )
+            const pct = w.total ? Math.round((w.done / w.total) * 100) : 0
             return (
               <div key={w.key} className="glass-subtle overflow-hidden rounded-2xl">
                 <button
@@ -161,8 +180,18 @@ export default function AssignmentsPanel({ courses, grouped, loading, error, fil
                     </div>
                     <div className="text-xs text-white/45">{w.range}</div>
                   </div>
-                  <span className="shrink-0 rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-white/70">
-                    {w.done}/{w.total}
+                  <span className="flex shrink-0 flex-col items-end gap-1.5">
+                    <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-white/70">
+                      {w.done}/{w.total}
+                    </span>
+                    <span className="h-1 w-20 overflow-hidden rounded-full bg-white/10">
+                      <span
+                        className={`block h-full rounded-full transition-all duration-500 ${
+                          w.finished ? 'bg-emerald-400' : 'bg-cyan-400/70'
+                        }`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </span>
                   </span>
                 </button>
 

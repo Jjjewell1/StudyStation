@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { getContacts, createContact } from '@/api/client'
+import { getContacts } from '@/api/client'
+import EmptyState from './EmptyState'
 import { Icon } from './Icon'
 
 export default function ContactsView() {
@@ -26,7 +27,7 @@ export default function ContactsView() {
   }
 
   return (
-    <section className="glass rounded-3xl p-5">
+    <section className="glass animate-rise rounded-3xl p-5">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-bold">Contacts</h2>
         <span className="text-xs text-white/45">{loading ? '…' : `${contacts.length} people`}</span>
@@ -64,7 +65,11 @@ export default function ContactsView() {
       </div>
 
       {!loading && contacts.length === 0 && (
-        <div className="py-10 text-center text-sm text-white/45">No contacts found.</div>
+        <EmptyState
+          icon="contacts"
+          title={query ? 'No matches' : 'No contacts yet'}
+          hint={query ? 'Try a different name or email.' : 'Link a Google account to sync your people.'}
+        />
       )}
     </section>
   )

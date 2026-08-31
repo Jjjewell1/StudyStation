@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getTaskLists, getTasks, createTask, updateTask, deleteTask } from '@/api/client'
+import EmptyState from './EmptyState'
 import { Icon } from './Icon'
 
 export default function TasksView() {
@@ -51,7 +52,7 @@ export default function TasksView() {
   const done = tasks.filter((t) => t.completed)
 
   return (
-    <section className="glass rounded-3xl p-5">
+    <section className="glass animate-rise rounded-3xl p-5">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-bold">Tasks</h2>
         {lists.length > 1 && (
@@ -90,7 +91,11 @@ export default function TasksView() {
       {loading && <div className="py-10 text-center text-sm text-white/40">Loading…</div>}
 
       {!loading && pending.length === 0 && done.length === 0 && (
-        <div className="py-10 text-center text-sm text-white/45">No tasks — add one above.</div>
+        <EmptyState
+          icon="tasks"
+          title="No tasks"
+          hint="Add one above to start chipping away."
+        />
       )}
 
       {pending.length > 0 && (

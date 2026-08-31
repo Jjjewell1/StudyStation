@@ -163,6 +163,63 @@ const paths = {
       <path d="m7 17-2.1 2.1" />
     </>
   ),
+  chevronLeft: (
+    <>
+      <path d="m15 18-6-6 6-6" />
+    </>
+  ),
+  chevronRight: (
+    <>
+      <path d="m9 6 6 6-6 6" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
+  pin: (
+    <>
+      <path d="M12 21s-6-5.2-6-10a6 6 0 1 1 12 0c0 4.8-6 10-6 10Z" />
+      <circle cx="12" cy="10.5" r="2.2" />
+    </>
+  ),
+  target: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+    </>
+  ),
+  plus: (
+    <>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </>
+  ),
+  arrowUpRight: (
+    <>
+      <path d="M7 17 17 7" />
+      <path d="M9 7h8v8" />
+    </>
+  ),
+  x: (
+    <>
+      <path d="m6 6 12 12" />
+      <path d="m18 6-12 12" />
+    </>
+  ),
+  zap: (
+    <>
+      <path d="M13 2 3 14h7l-1 8 11-13h-7l1-7Z" />
+    </>
+  ),
+  check: (
+    <>
+      <path d="M5 12l4 4L19 6" />
+    </>
+  ),
 }
 
 export function Icon({ name, className = 'w-5 h-5' }) {

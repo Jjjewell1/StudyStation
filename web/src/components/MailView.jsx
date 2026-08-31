@@ -52,7 +52,7 @@ export default function MailView() {
 
   if (open) {
     return (
-      <section className="glass rounded-3xl p-5">
+      <section className="glass animate-rise rounded-3xl p-5">
         <button
           onClick={() => setOpen(null)}
           className="mb-4 flex items-center gap-2 text-sm text-white/55 transition-colors hover:text-white"
@@ -72,7 +72,7 @@ export default function MailView() {
   }
 
   return (
-    <section className="glass rounded-3xl p-5">
+    <section className="glass animate-rise rounded-3xl p-5">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-bold">Mail</h2>
         <span className="text-xs text-white/45">{list.length} in inbox</span>

@@ -26,13 +26,14 @@ function Background() {
         data-depth="0.6"
       />
       <div
-        className="blob right-[-12%] top-[10%] h-[38rem] w-[38rem] bg-fuchsia-600/35"
+        className="blob second right-[-12%] top-[10%] h-[38rem] w-[38rem] bg-fuchsia-600/35"
         data-depth="0.35"
       />
       <div
-        className="blob bottom-[-20%] left-[30%] h-[40rem] w-[40rem] bg-teal-500/30"
+        className="blob third bottom-[-20%] left-[30%] h-[40rem] w-[40rem] bg-teal-500/30"
         data-depth="0.5"
       />
+      <div className="grain" />
     </div>
   )
 }
@@ -85,6 +86,7 @@ function Dashboard({ onLogout }) {
   const { courses, assignments, stats, filtered, loading, error, updateStatus, reload } = useDashboardData()
   const [active, setActive] = useState('overview')
   const [filterKey, setFilterKey] = useState(null)
+  const [search, setSearch] = useState('')
   const google = useGoogleStatus()
 
   // Group assignments by course, sorted by course name.
@@ -171,7 +173,7 @@ function Dashboard({ onLogout }) {
         <Sidebar active={active} onNavigate={setActive} />
 
         <main className="flex min-w-0 flex-1 flex-col gap-6 pb-8">
-          <Header />
+          <Header search={search} onSearch={setSearch} />
 
           {error && (
             <div className="glass rounded-3xl border-red-400/30 p-4 text-sm text-red-200">
@@ -189,6 +191,7 @@ function Dashboard({ onLogout }) {
                     grouped={grouped}
                     loading={loading}
                     error={error}
+                    search={search}
                     onStatusChange={updateStatus}
                   />
                 </div>
@@ -222,6 +225,7 @@ function Dashboard({ onLogout }) {
                 loading={loading}
                 error={error}
                 filter={filterKey ? FILTERS[filterKey] : null}
+                search={search}
                 onClearFilter={() => setFilterKey(null)}
                 onStatusChange={updateStatus}
               />
