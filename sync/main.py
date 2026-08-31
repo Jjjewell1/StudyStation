@@ -46,18 +46,20 @@ BANNER = r"""
 """
 
 
-def pull_everything(cfg: Config) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
+def pull_everything(
+    cfg: Config, session_override: str | None = None
+) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
     """HTTP phase: fetch all data into memory. Raises SessionExpired."""
     today = datetime.now(timezone.utc).date()
     window_start = (today - timedelta(days=cfg.cal_window_days_back)).isoformat()
-    window_end = (today + timedelta(days=cfg.cal_window_days_ahead)).isoformat()
+    window_end = (today - timedelta(days=cfg.cal_window_days_ahead)).isoformat()
 
     courses: list[dict] = []
     assignments: list[dict] = []
     events: list[dict] = []
     resource_links: list[dict] = []
 
-    with open_canvas_request() as ctx:
+    with open_canvas_request(session_override) as ctx:
         for c in iter_pages(
             ctx,
             "/api/v1/courses",
@@ -167,7 +169,12 @@ def main() -> int:
         db.ensure_schema(engine)
         log.info("Schema OK (pgvector + tables verified)")
 
-        courses, assignments, events, resource_links = pull_everything(cfg)
+        # A self-service session saved from the dashboard wins over the env var.
+        session_override = db.get_canvas_session_override(engine)
+        if session_override:
+            log.info("Using dashboard-saved Canvas session override")
+
+        courses, assignments, events, resource_links = pull_everything(cfg, session_override)
         if not courses:
             log.warning("No active courses returned - nothing to sync. "
                         "Check enrollment_state or the account used to capture the session.")

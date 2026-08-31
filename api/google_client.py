@@ -26,7 +26,7 @@ from googleapiclient.discovery import build
 
 SCOPES = [
     "openid",  # OpenID identity scopes: without these Google won't issue an
-    "email",   # id_token (which carries the account email used to key our token store).
+    "https://www.googleapis.com/auth/userinfo.email",  # canonical 'email' → id_token email claim
     "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/contacts",
     "https://www.googleapis.com/auth/tasks",
@@ -200,7 +200,10 @@ def build_auth_url(engine: sa.Engine) -> str:
     auth_url, state = flow.authorization_url(
         access_type="offline",
         prompt="consent",  # re-consent ensures a fresh refresh token each link
-        include_granted_scopes="true",
+        # NOTE: no include_granted_scopes. Requesting scopes by exact literal
+        # keeps Google's server-side scope comparison stable across retries
+        # (otherwise the `email` alias vs userinfo.email canonicalization can
+        # trigger "Scope has changed" on token exchange).
     )
     _set_state(engine, state, getattr(flow, "code_verifier", None))
     return auth_url

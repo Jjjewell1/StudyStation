@@ -25,9 +25,11 @@ from db import (
     fetch_drop_log,
     fetch_last_sync,
     fetch_resource_links,
+    get_canvas_session,
     make_engine,
     restore_course,
     set_assignment_status,
+    set_canvas_session,
 )
 import db as db_module
 import auth
@@ -131,6 +133,51 @@ def sync_now() -> dict:
         return json.loads(body)
     except Exception:  # noqa: BLE001
         return {"started": True, "raw": body[:1000]}
+
+
+@app.get("/api/sync/session")
+def canvas_session_status() -> dict:
+    raw = get_canvas_session(engine)
+    if not raw:
+        return {"set": False, "cookies": 0}
+    try:
+        cookies = ((json.loads(raw) or {}).get("cookies") or [])
+    except Exception:  # noqa: BLE001 - stored override is corrupt; UI will show it
+        cookies = []
+    return {"set": True, "cookies": len(cookies) if isinstance(cookies, list) else 0}
+
+
+@app.post("/api/sync/session")
+def canvas_session_upload(body: dict) -> dict:
+    """Save (or clear) the self-service Canvas session override.
+
+    session_json is the full minified JSON from capture_session.py. Empty
+    string / None clears the override and reverts to CANVAS_SESSION_JSON.
+    """
+    raw = (body or {}).get("session_json")
+    if raw is None:
+        set_canvas_session(engine, None)
+        return {"set": False, "cookies": 0}
+    raw = str(raw).strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="session_json must not be empty")
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="Not valid JSON - paste the whole minified canvas_session.json "
+                   "(it must start with { and end with }).",
+        )
+    cookies = (data or {}).get("cookies")
+    if not isinstance(cookies, list) or not cookies:
+        raise HTTPException(
+            status_code=400,
+            detail="storage_state must contain a non-empty 'cookies' list - "
+                   "re-capture with capture_session.py.",
+        )
+    updated_at = set_canvas_session(engine, raw)
+    return {"set": True, "cookies": len(cookies), "updatedAt": updated_at}
 
 
 @app.get("/api/courses")

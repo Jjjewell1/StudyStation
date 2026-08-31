@@ -7,6 +7,9 @@ import {
   dropCourse,
   restoreCourse,
   getDroppedCourses,
+  getCanvasSession,
+  saveCanvasSession,
+  clearCanvasSession,
 } from '@/api/client'
 
 const TABS = [
@@ -57,6 +60,17 @@ export default function SettingsView({ onLogout, courses, onDataChanged }) {
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState(null)
   const [dropped, setDropped] = useState(null) // { dropped: [], log: [] }
+  const [canvasSession, setCanvasSession] = useState(null) // { set, cookies }
+  const [sessionOpen, setSessionOpen] = useState(false)
+  const [sessionText, setSessionText] = useState('')
+  const [sessionBusy, setSessionBusy] = useState(false)
+  const [sessionMsg, setSessionMsg] = useState(null)
+
+  function refreshCanvasSession() {
+    getCanvasSession()
+      .then(setCanvasSession)
+      .catch(() => setCanvasSession({ set: false, cookies: 0 }))
+  }
 
   function refreshSyncStatus() {
     getSyncStatus()
@@ -73,7 +87,38 @@ export default function SettingsView({ onLogout, courses, onDataChanged }) {
   useEffect(() => {
     refreshSyncStatus()
     refreshDropped()
+    refreshCanvasSession()
   }, [])
+
+  async function saveSession() {
+    setSessionBusy(true)
+    setSessionMsg(null)
+    try {
+      const res = await saveCanvasSession(sessionText.trim())
+      setSessionMsg({ ok: true, text: `Saved on server (${res.cookies} cookies). Click "Sync now" to verify.` })
+      setSessionText('')
+      setSessionOpen(false)
+      refreshCanvasSession()
+    } catch (e) {
+      setSessionMsg({ ok: false, text: e.message })
+    } finally {
+      setSessionBusy(false)
+    }
+  }
+
+  async function clearSession() {
+    setSessionBusy(true)
+    setSessionMsg(null)
+    try {
+      await clearCanvasSession()
+      setSessionMsg({ ok: true, text: 'Cleared - the sync reverts to the server-configured session.' })
+      refreshCanvasSession()
+    } catch (e) {
+      setSessionMsg({ ok: false, text: e.message })
+    } finally {
+      setSessionBusy(false)
+    }
+  }
 
   async function syncNow() {
     if (syncing) return
@@ -155,7 +200,7 @@ export default function SettingsView({ onLogout, courses, onDataChanged }) {
                 <p className="text-amber-300">
                   Sync exited with code {syncResult.exit_code}.{' '}
                   {syncResult.exit_code === 2
-                    ? 'Canvas session expired — re-capture it (see below).'
+                    ? 'Canvas session expired — re-capture it with the "Re-capture session" button below.'
                     : 'Check the logs for details.'}
                 </p>
               )}
@@ -194,12 +239,78 @@ export default function SettingsView({ onLogout, courses, onDataChanged }) {
             )}
           </div>
 
-          <p className="text-xs text-white/40">
-            Note: the sync normally runs nightly (and on every redeploy). If your Canvas
-            session has expired, a manual sync will fail until you re-capture it by running{' '}
-            <code>capture_session.py</code> locally and updating{' '}
-            <code>CANVAS_SESSION_JSON</code>.
-          </p>
+          <div className="glass-subtle rounded-2xl p-4">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/40">
+              Canvas session
+            </div>
+            <p className="text-sm text-white/70">
+              {canvasSession?.set
+                ? `A session you saved is active (${canvasSession.cookies} cookies). It is used ahead of the server-configured one.`
+                : 'Using the server-configured Canvas session.'}
+            </p>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                onClick={() => { setSessionOpen(!sessionOpen); setSessionMsg(null) }}
+                className="flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-white/15"
+              >
+                <Icon name="refresh" className="h-4 w-4" />
+                {canvasSession?.set ? 'Replace session' : 'Re-capture session'}
+              </button>
+              {canvasSession?.set && (
+                <button
+                  onClick={clearSession}
+                  disabled={sessionBusy}
+                  className="flex items-center gap-2 rounded-2xl bg-white/5 px-4 py-2 text-sm font-semibold text-white/55 transition-all hover:bg-white/10 disabled:opacity-50"
+                >
+                  <Icon name="trash" className="h-4 w-4" />
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {sessionOpen && (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-white/45">
+                  1. On your PC, run{' '}
+                  <code className="rounded bg-black/30 px-1 py-0.5 text-[11px]">python capture_session.py</code>{' '}
+                  from the StudyStation repo and sign in to Canvas in the browser that opens.
+                </p>
+                <p className="text-xs text-white/45">
+                  2. Paste the contents of the generated{' '}
+                  <code className="rounded bg-black/30 px-1 py-0.5 text-[11px]">canvas_session.json</code>{' '}
+                  below and save. No redeploy needed.
+                </p>
+                <textarea
+                  value={sessionText}
+                  onChange={(e) => setSessionText(e.target.value)}
+                  rows={4}
+                  placeholder='{"cookies": [...], "origins": []}'
+                  className="w-full rounded-xl border border-white/10 bg-black/30 p-3 font-mono text-xs text-white/80 outline-none focus:border-cyan-400/50"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveSession}
+                    disabled={sessionBusy || !sessionText.trim()}
+                    className="flex items-center gap-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50"
+                  >
+                    {sessionBusy ? 'Saving…' : 'Save session on server'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {sessionMsg && (
+              <p className={`mt-3 text-xs ${sessionMsg.ok ? 'text-emerald-300' : 'text-red-300'}`}>
+                {sessionMsg.text}
+              </p>
+            )}
+
+            <p className="mt-3 text-xs text-white/40">
+              The sync normally runs nightly (and on every redeploy). If your Canvas session has
+              expired, a manual sync fails with exit code 2 — re-capture it above.
+            </p>
+          </div>
         </div>
       )}
 

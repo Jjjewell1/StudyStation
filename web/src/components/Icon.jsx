@@ -125,6 +125,14 @@ const paths = {
       <path d="M8 12h8" />
     </>
   ),
+  refresh: (
+    <>
+      <path d="M20 11A8 8 0 0 0 6.7 7.3L5 9" />
+      <path d="M5 5v4h4" />
+      <path d="M4 13a8 8 0 0 0 13.3 3.7L19 15" />
+      <path d="M19 19v-4h-4" />
+    </>
+  ),
   trash: (
     <>
       <path d="M4 7h16" />

@@ -104,3 +104,11 @@ CREATE TABLE IF NOT EXISTS sync_runs (
     detail     TEXT,
     counts     JSONB
 );
+
+-- Self-service Canvas session override set from the dashboard (no redeploy).
+-- Single row: when present it wins over CANVAS_SESSION_JSON until cleared.
+CREATE TABLE IF NOT EXISTS canvas_session (
+    id           INTEGER PRIMARY KEY DEFAULT 1,
+    session_json TEXT NOT NULL,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);

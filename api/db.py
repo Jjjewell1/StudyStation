@@ -119,6 +119,15 @@ def ensure_schema(engine: sa.Engine) -> None:
             "  restored_at TIMESTAMPTZ"
             ")"
         ))
+        # Self-service Canvas session override set from the dashboard. The sync
+        # job reads it (this table is also declared in sync/schema.sql).
+        conn.execute(sa.text(
+            "CREATE TABLE IF NOT EXISTS canvas_session ("
+            "  id INTEGER PRIMARY KEY DEFAULT 1,"
+            "  session_json TEXT NOT NULL,"
+            "  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()"
+            ")"
+        ))
         # User-uploaded class documents (raw file bytes) + text chunks for AI
         # Q&A. Chunks carry a generated tsvector column so retrieval can use
         # Postgres full-text ranking instead of an embedding service.
@@ -466,6 +475,36 @@ def fetch_last_sync(engine: sa.Engine) -> dict | None:
         "detail": row["detail"],
         "counts": row["counts"],
     }
+
+
+# --- Canvas session override (self-service re-capture) ------------------
+
+
+def get_canvas_session(engine: sa.Engine) -> str | None:
+    with engine.connect() as conn:
+        row = conn.execute(sa.text(
+            "SELECT session_json FROM canvas_session WHERE id = 1"
+        )).first()
+    return row[0] if row else None
+
+
+def set_canvas_session(engine: sa.Engine, session_json: str | None):
+    """Set the override (None/empty clears it, reverting to the env var)."""
+    with engine.begin() as conn:
+        if not (session_json or "").strip():
+            conn.execute(sa.text(
+                "DELETE FROM canvas_session WHERE id = 1"
+            ))
+            return None
+        return conn.execute(
+            sa.text(
+                "INSERT INTO canvas_session (id, session_json, updated_at) "
+                "VALUES (1, :s, now()) "
+                "ON CONFLICT (id) DO UPDATE SET session_json = :s, updated_at = now() "
+                "RETURNING updated_at"
+            ),
+            {"s": session_json},
+        ).scalar()
 
 
 # --- Class document uploads ---------------------------------------------

@@ -43,13 +43,14 @@ def canvas_base_url() -> str:
     return base
 
 
-def load_storage_state() -> dict:
-    """Return the captured storage_state dict from env var or file.
+def load_storage_state(override: str | None = None) -> dict:
+    """Return the captured storage_state dict from an override, env var, or file.
 
-    CANVAS_SESSION_JSON wins if set (that's how Coolify passes it); otherwise
-    CANVAS_SESSION_FILE (default ./canvas_session.json) is read from disk.
+    Precedence: an explicit `override` (the dashboard's DB-backed session),
+    then CANVAS_SESSION_JSON (how Coolify passes it), then
+    CANVAS_SESSION_FILE (default ./canvas_session.json) from disk.
     """
-    raw = (os.environ.get("CANVAS_SESSION_JSON") or "").strip()
+    raw = (override or "").strip() or (os.environ.get("CANVAS_SESSION_JSON") or "").strip()
     if raw:
         try:
             state = json.loads(raw)
@@ -78,10 +79,10 @@ def load_storage_state() -> dict:
 
 
 @contextmanager
-def open_canvas_request():
+def open_canvas_request(override: str | None = None):
     """Yield a Playwright APIRequestContext carrying the captured session."""
     base = canvas_base_url()
-    state = load_storage_state()
+    state = load_storage_state(override)
     with sync_playwright() as pw:
         ctx = pw.request.new_context(
             storage_state=state,

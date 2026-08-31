@@ -93,6 +93,15 @@ def make_engine(database_url: str) -> sa.Engine:
     return sa.create_engine(database_url, pool_pre_ping=True)
 
 
+def get_canvas_session_override(engine: sa.Engine) -> str | None:
+    """Return the dashboard-saved canvas_session.json override, if any."""
+    with engine.connect() as conn:
+        row = conn.execute(sa.text(
+            "SELECT session_json FROM canvas_session WHERE id = 1"
+        )).first()
+    return row[0] if row else None
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
