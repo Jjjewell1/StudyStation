@@ -11,6 +11,7 @@ Routes (all served under /api by nginx):
 
 from __future__ import annotations
 
+import json
 import os
 import urllib.request
 
@@ -129,7 +130,6 @@ def sync_now() -> dict:
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"sync trigger failed: {exc}") from exc
     try:
-        import json
         return json.loads(body)
     except Exception:  # noqa: BLE001
         return {"started": True, "raw": body[:1000]}
