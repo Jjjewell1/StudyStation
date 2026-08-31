@@ -25,6 +25,8 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
 SCOPES = [
+    "openid",  # OpenID identity scopes: without these Google won't issue an
+    "email",   # id_token (which carries the account email used to key our token store).
     "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/contacts",
     "https://www.googleapis.com/auth/tasks",
@@ -223,6 +225,8 @@ def exchange_code(engine: sa.Engine, code: str, state: str | None) -> str:
     if not email:
         email = _email_from_tokeninfo(creds.token)
     if not email:
+        email = _email_from_userinfo(creds.token)
+    if not email:
         raise RuntimeError("could not determine the Google account email")
     _save(
         engine,
@@ -251,6 +255,21 @@ def _email_from_tokeninfo(access_token: str) -> str | None:
         import urllib.request
         url = f"https://oauth2.googleapis.com/tokeninfo?access_token={access_token}"
         with urllib.request.urlopen(url, timeout=10) as resp:
+            return _json.loads(resp.read().decode("utf-8")).get("email")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _email_from_userinfo(access_token: str) -> str | None:
+    """Fallback: the userinfo endpoint returns email for most valid tokens."""
+    try:
+        import json as _json
+        import urllib.request
+        req = urllib.request.Request(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
             return _json.loads(resp.read().decode("utf-8")).get("email")
     except Exception:  # noqa: BLE001
         return None
