@@ -8,7 +8,6 @@ import {
   restoreCourse,
   getDroppedCourses,
   getCanvasSession,
-  saveCanvasSession,
   clearCanvasSession,
   requestCapture,
 } from '@/api/client'
@@ -62,8 +61,6 @@ export default function SettingsView({ onLogout, courses, onDataChanged }) {
   const [syncResult, setSyncResult] = useState(null)
   const [dropped, setDropped] = useState(null) // { dropped: [], log: [] }
   const [canvasSession, setCanvasSession] = useState(null) // { set, cookies }
-  const [sessionOpen, setSessionOpen] = useState(false)
-  const [sessionText, setSessionText] = useState('')
   const [sessionBusy, setSessionBusy] = useState(false)
   const [sessionMsg, setSessionMsg] = useState(null)
   const [captureMsg, setCaptureMsg] = useState(null)
@@ -91,22 +88,6 @@ export default function SettingsView({ onLogout, courses, onDataChanged }) {
     refreshDropped()
     refreshCanvasSession()
   }, [])
-
-  async function saveSession() {
-    setSessionBusy(true)
-    setSessionMsg(null)
-    try {
-      const res = await saveCanvasSession(sessionText.trim())
-      setSessionMsg({ ok: true, text: `Saved on server (${res.cookies} cookies). Click "Sync now" to verify.` })
-      setSessionText('')
-      setSessionOpen(false)
-      refreshCanvasSession()
-    } catch (e) {
-      setSessionMsg({ ok: false, text: e.message })
-    } finally {
-      setSessionBusy(false)
-    }
-  }
 
   async function clearSession() {
     setSessionBusy(true)
@@ -272,13 +253,6 @@ export default function SettingsView({ onLogout, courses, onDataChanged }) {
                 <Icon name="zap" className="h-4 w-4" />
                 Capture on this PC
               </button>
-              <button
-                onClick={() => { setSessionOpen(!sessionOpen); setSessionMsg(null) }}
-                className="flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-white/15"
-              >
-                <Icon name="refresh" className="h-4 w-4" />
-                {canvasSession?.set ? 'Replace session' : 'Re-capture session'}
-              </button>
               {canvasSession?.set && (
                 <button
                   onClick={clearSession}
@@ -303,37 +277,6 @@ export default function SettingsView({ onLogout, courses, onDataChanged }) {
               <code className="rounded bg-black/30 px-1 py-0.5 text-[11px]">.venv\Scripts\python.exe tools\session_bridge.py</code>{' '}
               once at login (or double-click <code className="rounded bg-black/30 px-1 py-0.5 text-[11px]">capture.bat</code> to do it manually).
             </p>
-
-            {sessionOpen && (
-              <div className="mt-3 space-y-2">
-                <p className="text-xs text-white/45">
-                  1. On your PC, run{' '}
-                  <code className="rounded bg-black/30 px-1 py-0.5 text-[11px]">python capture_session.py</code>{' '}
-                  from the StudyStation repo and sign in to Canvas in the browser that opens.
-                </p>
-                <p className="text-xs text-white/45">
-                  2. Paste the contents of the generated{' '}
-                  <code className="rounded bg-black/30 px-1 py-0.5 text-[11px]">canvas_session.json</code>{' '}
-                  below and save. No redeploy needed.
-                </p>
-                <textarea
-                  value={sessionText}
-                  onChange={(e) => setSessionText(e.target.value)}
-                  rows={4}
-                  placeholder='{"cookies": [...], "origins": []}'
-                  className="w-full rounded-xl border border-white/10 bg-black/30 p-3 font-mono text-xs text-white/80 outline-none focus:border-cyan-400/50"
-                />
-                <div className="flex gap-2">
-                  <button
-                    onClick={saveSession}
-                    disabled={sessionBusy || !sessionText.trim()}
-                    className="flex items-center gap-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50"
-                  >
-                    {sessionBusy ? 'Saving…' : 'Save session on server'}
-                  </button>
-                </div>
-              </div>
-            )}
 
             {sessionMsg && (
               <p className={`mt-3 text-xs ${sessionMsg.ok ? 'text-emerald-300' : 'text-red-300'}`}>
