@@ -97,8 +97,9 @@ def ensure_schema(engine: sa.Engine) -> None:
         ))
         # google_state started as a single row (id INTEGER PK DEFAULT 1); the
         # OAuth `state` from parallel/retried connect flows clobbered each
-        # other, causing CSRF-looking mismatches on callback. Migrate it to a
-        # time-expiring queue keyed by the state value itself.
+        # other, causing CSRF-looking mismatches on callback. It's now a
+        # time-expiring queue keyed by the state value, carrying the PKCE
+        # code_verifier so the callback can finish the token exchange.
         has_state_queue = conn.execute(sa.text(
             "SELECT 1 FROM information_schema.columns "
             "WHERE table_name = 'google_state' AND column_name = 'created_at'"
@@ -109,9 +110,16 @@ def ensure_schema(engine: sa.Engine) -> None:
                 "CREATE TABLE google_state ("
                 "  id BIGSERIAL PRIMARY KEY,"
                 "  state TEXT NOT NULL,"
+                "  verifier TEXT,"
                 "  created_at TIMESTAMPTZ NOT NULL DEFAULT now()"
                 ")"
             ))
+        has_verifier = conn.execute(sa.text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'google_state' AND column_name = 'verifier'"
+        )).first()
+        if not has_verifier:
+            conn.execute(sa.text("ALTER TABLE google_state ADD COLUMN verifier TEXT"))
         conn.execute(sa.text(
             "CREATE INDEX IF NOT EXISTS idx_google_state_lookup ON google_state(state)"
         ))
@@ -152,39 +160,47 @@ def _upsert_field(engine: sa.Engine, email: str, field: str, value) -> None:
 STATE_TTL_MINUTES = 15
 
 
-def _set_state(engine: sa.Engine, state: str | None) -> None:
-    """Queue a fresh OAuth state (multi-row; old states expire)."""
+def _set_state(engine: sa.Engine, state: str | None, verifier: str | None = None) -> None:
+    """Queue a fresh OAuth state + PKCE verifier (multi-row; old ones expire)."""
     if not state:
         return
     with engine.begin() as conn:
         conn.execute(
-            sa.text("INSERT INTO google_state (state) VALUES (:s)"),
-            {"s": state},
+            sa.text("INSERT INTO google_state (state, verifier) VALUES (:s, :v)"),
+            {"s": state, "v": verifier},
         )
         conn.execute(
             sa.text("DELETE FROM google_state WHERE created_at < now() - interval '15 minutes'")
         )
 
 
-def _take_state(engine: sa.Engine, state: str) -> bool:
-    """Validate + consume one queued state value. True only if it was queued."""
+def _take_state(engine: sa.Engine, state: str) -> str | None | False:
+    """Validate + consume one queued state value.
+
+    Returns its code_verifier (or None), or False when the state was never
+    queued (or already used)."""
     with engine.begin() as conn:
-        result = conn.execute(
-            sa.text("DELETE FROM google_state WHERE state = :s"),
+        row = conn.execute(
+            sa.text("DELETE FROM google_state WHERE state = :s RETURNING verifier"),
             {"s": state},
-        )
-        return (result.rowcount or 0) > 0
+        ).first()
+    return row[0] if row else False
 
 
 def build_auth_url(engine: sa.Engine) -> str:
-    """Generate the Google consent URL and persist the OAuth `state`."""
+    """Generate the Google consent URL and persist the OAuth `state`.
+
+    google-auth-oauthlib autogenerates a PKCE code_verifier when building the
+    consent URL (which is why the URL carries a S256 code_challenge). The
+    verifier only exists on the Flow object, so it's stored with the state to
+    complete the token exchange on the other side."""
     flow = Flow.from_client_config(_client_config(), scopes=SCOPES, redirect_uri=redirect_uri())
     auth_url, state = flow.authorization_url(
         access_type="offline",
         prompt="consent",  # re-consent ensures a fresh refresh token each link
         include_granted_scopes="true",
     )
-    _set_state(engine, state)
+    _set_state(engine, state, getattr(flow, "code_verifier", None))
     return auth_url
 
 
@@ -192,10 +208,15 @@ def exchange_code(engine: sa.Engine, code: str, state: str | None) -> str:
     """Exchange the OAuth code for tokens, persist keyed by email.
 
     The `state` must have been queued by build_auth_url; it's consumed (one
-    use only) so a replay or stale callback can't pass validation."""
-    if not state or not _take_state(engine, state):
+    use only) so a replay or stale callback can't pass validation. The PKCE
+    code_verifier captured at consent-URL build time is restored onto a fresh
+    Flow so Google accepts the exchange."""
+    verifier = _take_state(engine, state) if state else False
+    if verifier is False:
         raise RuntimeError("OAuth state mismatch - possible CSRF, retry the link.")
     flow = Flow.from_client_config(_client_config(), scopes=SCOPES, redirect_uri=redirect_uri())
+    if verifier:
+        flow.code_verifier = verifier
     flow.fetch_token(code=code)
     creds = flow.credentials
     email = creds.id_token and _email_from_id_token(creds.id_token)
