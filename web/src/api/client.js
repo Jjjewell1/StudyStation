@@ -69,6 +69,7 @@ export const triggerSync = () => sendJSON('/sync', 'POST')
 export const getCanvasSession = () => getJSON('/sync/session')
 export const saveCanvasSession = (sessionJson) => sendJSON('/sync/session', 'POST', { session_json: sessionJson })
 export const clearCanvasSession = () => sendJSON('/sync/session', 'POST', {})
+export const requestCapture = () => sendJSON('/sync/capture/request', 'POST')
 
 // Courses: drop / restore
 export const dropCourse = (id) => sendJSON(`/courses/${id}/drop`, 'POST')

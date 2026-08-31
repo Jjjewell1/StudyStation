@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.request
 
 from fastapi import FastAPI, HTTPException, Request
@@ -178,6 +179,43 @@ def canvas_session_upload(body: dict) -> dict:
         )
     updated_at = set_canvas_session(engine, raw)
     return {"set": True, "cookies": len(cookies), "updatedAt": updated_at}
+
+
+# Transient in-memory signal used by the local session bridge
+# (tools/session_bridge.py). When the dashboard asks to re-capture on the
+# user's PC, we set a pending request here; the bridge polls this endpoint,
+# sees it, and launches capture_session.py. It expires after a couple minutes
+# and is never persisted.
+_CAPTURE_TTL_S = 180
+_pending_capture = {"id": None, "at": 0.0}
+
+
+@app.get("/api/sync/capture/request")
+def capture_request() -> dict:
+    now = time.time()
+    if _pending_capture["id"] and now - _pending_capture["at"] <= _CAPTURE_TTL_S:
+        return {
+            "pending": True,
+            "id": _pending_capture["id"],
+            "at": _pending_capture["at"],
+            "ttlSeconds": _CAPTURE_TTL_S,
+        }
+    return {"pending": False, "id": None, "at": None, "ttlSeconds": _CAPTURE_TTL_S}
+
+
+@app.post("/api/sync/capture/request")
+def request_capture() -> dict:
+    import uuid
+
+    _pending_capture["id"] = str(uuid.uuid4())
+    _pending_capture["at"] = time.time()
+    return {
+        "pending": True,
+        "id": _pending_capture["id"],
+        "msg": "Capture requested - a browser should open on your PC in a few seconds. "
+               "If you don't have the session bridge running, run "
+               "tools\\session_bridge.py on this computer.",
+    }
 
 
 @app.get("/api/courses")

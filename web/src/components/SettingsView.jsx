@@ -10,6 +10,7 @@ import {
   getCanvasSession,
   saveCanvasSession,
   clearCanvasSession,
+  requestCapture,
 } from '@/api/client'
 
 const TABS = [
@@ -65,6 +66,7 @@ export default function SettingsView({ onLogout, courses, onDataChanged }) {
   const [sessionText, setSessionText] = useState('')
   const [sessionBusy, setSessionBusy] = useState(false)
   const [sessionMsg, setSessionMsg] = useState(null)
+  const [captureMsg, setCaptureMsg] = useState(null)
 
   function refreshCanvasSession() {
     getCanvasSession()
@@ -117,6 +119,19 @@ export default function SettingsView({ onLogout, courses, onDataChanged }) {
       setSessionMsg({ ok: false, text: e.message })
     } finally {
       setSessionBusy(false)
+    }
+  }
+
+  async function requestLocalCapture() {
+    setCaptureMsg(null)
+    try {
+      const res = await requestCapture()
+      setCaptureMsg({
+        ok: true,
+        text: res.msg || 'Capture requested. A browser should open on your PC in a few seconds - complete the login there.',
+      })
+    } catch (e) {
+      setCaptureMsg({ ok: false, text: e.message })
     }
   }
 
@@ -251,6 +266,13 @@ export default function SettingsView({ onLogout, courses, onDataChanged }) {
 
             <div className="mt-3 flex flex-wrap gap-2">
               <button
+                onClick={requestLocalCapture}
+                className="flex items-center gap-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition-all hover:scale-[1.02] active:scale-95"
+              >
+                <Icon name="zap" className="h-4 w-4" />
+                Capture on this PC
+              </button>
+              <button
                 onClick={() => { setSessionOpen(!sessionOpen); setSessionMsg(null) }}
                 className="flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-white/15"
               >
@@ -268,6 +290,19 @@ export default function SettingsView({ onLogout, courses, onDataChanged }) {
                 </button>
               )}
             </div>
+
+            {captureMsg && (
+              <p className={`mt-3 text-xs ${captureMsg.ok ? 'text-cyan-300' : 'text-red-300'}`}>
+                {captureMsg.text}
+              </p>
+            )}
+
+            <p className="mt-3 text-xs text-white/40">
+              One-click capture needs the local session bridge running on this PC:
+              run{' '}
+              <code className="rounded bg-black/30 px-1 py-0.5 text-[11px]">.venv\Scripts\python.exe tools\session_bridge.py</code>{' '}
+              once at login (or double-click <code className="rounded bg-black/30 px-1 py-0.5 text-[11px]">capture.bat</code> to do it manually).
+            </p>
 
             {sessionOpen && (
               <div className="mt-3 space-y-2">
