@@ -47,8 +47,9 @@ google_tokens_t = sa.Table(
 
 google_state_t = sa.Table(
     "google_state", metadata,
-    sa.Column("id", sa.Integer, primary_key=True, default=1),
+    sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
     sa.Column("state", sa.Text),
+    sa.Column("created_at", sa.DateTime(timezone=True)),
 )
 
 
@@ -94,11 +95,25 @@ def ensure_schema(engine: sa.Engine) -> None:
             "  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()"
             ")"
         ))
+        # google_state started as a single row (id INTEGER PK DEFAULT 1); the
+        # OAuth `state` from parallel/retried connect flows clobbered each
+        # other, causing CSRF-looking mismatches on callback. Migrate it to a
+        # time-expiring queue keyed by the state value itself.
+        has_state_queue = conn.execute(sa.text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'google_state' AND column_name = 'created_at'"
+        )).first()
+        if not has_state_queue:
+            conn.execute(sa.text("DROP TABLE IF EXISTS google_state"))
+            conn.execute(sa.text(
+                "CREATE TABLE google_state ("
+                "  id BIGSERIAL PRIMARY KEY,"
+                "  state TEXT NOT NULL,"
+                "  created_at TIMESTAMPTZ NOT NULL DEFAULT now()"
+                ")"
+            ))
         conn.execute(sa.text(
-            "CREATE TABLE IF NOT EXISTS google_state ("
-            "  id INTEGER PRIMARY KEY DEFAULT 1,"
-            "  state TEXT"
-            ")"
+            "CREATE INDEX IF NOT EXISTS idx_google_state_lookup ON google_state(state)"
         ))
 
 
@@ -134,21 +149,31 @@ def _upsert_field(engine: sa.Engine, email: str, field: str, value) -> None:
         )
 
 
+STATE_TTL_MINUTES = 15
+
+
 def _set_state(engine: sa.Engine, state: str | None) -> None:
+    """Queue a fresh OAuth state (multi-row; old states expire)."""
+    if not state:
+        return
     with engine.begin() as conn:
-        if state is None:
-            conn.execute(google_state_t.delete())
-        else:
-            conn.execute(
-                pg_insert(google_state_t).values(id=1, state=state)
-                .on_conflict_do_update(index_elements=["id"], set_={"state": state})
-            )
+        conn.execute(
+            sa.text("INSERT INTO google_state (state) VALUES (:s)"),
+            {"s": state},
+        )
+        conn.execute(
+            sa.text("DELETE FROM google_state WHERE created_at < now() - interval '15 minutes'")
+        )
 
 
-def _get_state(engine: sa.Engine) -> str | None:
-    with engine.connect() as conn:
-        row = conn.execute(google_state_t.select().where(google_state_t.c.id == 1)).first()
-    return row[0] if row else None
+def _take_state(engine: sa.Engine, state: str) -> bool:
+    """Validate + consume one queued state value. True only if it was queued."""
+    with engine.begin() as conn:
+        result = conn.execute(
+            sa.text("DELETE FROM google_state WHERE state = :s"),
+            {"s": state},
+        )
+        return (result.rowcount or 0) > 0
 
 
 def build_auth_url(engine: sa.Engine) -> str:
@@ -164,9 +189,11 @@ def build_auth_url(engine: sa.Engine) -> str:
 
 
 def exchange_code(engine: sa.Engine, code: str, state: str | None) -> str:
-    """Exchange the OAuth code for tokens, persist keyed by email."""
-    stored = _get_state(engine)
-    if state and stored and state != stored:
+    """Exchange the OAuth code for tokens, persist keyed by email.
+
+    The `state` must have been queued by build_auth_url; it's consumed (one
+    use only) so a replay or stale callback can't pass validation."""
+    if not state or not _take_state(engine, state):
         raise RuntimeError("OAuth state mismatch - possible CSRF, retry the link.")
     flow = Flow.from_client_config(_client_config(), scopes=SCOPES, redirect_uri=redirect_uri())
     flow.fetch_token(code=code)
@@ -183,7 +210,6 @@ def exchange_code(engine: sa.Engine, code: str, state: str | None) -> str:
         access_token=creds.token,
         token_expiry=creds.expiry,
     )
-    _set_state(engine, None)
     return email
 
 
